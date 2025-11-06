@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: mango-orchestrator
+    env: python
+    buildCommand: pip install -r requirements.txt && playwright install chromium
+    startCommand: python core/orchestrator.py
+    plan: starter
+    envVars:
+      - key: GEMINI_API_KEY
+        value: AIzaSyA3caiS86rgxCnOWrP95WQL0C1PyBKoeoA
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: TELEGRAM_TOKEN
+        value: 7721482203:AAHEHoqnFjx_ZzEBKHT-PEHDpZNBLxOzbUE
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.0
+  
+  - type: web
+    name: mango-dashboard
+    env: python
+    buildCommand: pip install fastapi uvicorn
+    startCommand: python deploy/monitor_dashboard.py
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+
