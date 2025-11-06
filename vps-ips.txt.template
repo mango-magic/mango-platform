@@ -1,0 +1,20 @@
+# VPS IP Address Mapping
+# Format: AGENT_ID,IP_ADDRESS
+
+# Developer Agents
+eng_manager_001,1.2.3.4
+backend_001,1.2.3.5
+backend_002,1.2.3.6
+backend_003,1.2.3.7
+frontend_001,1.2.3.8
+frontend_002,1.2.3.9
+ml_001,1.2.3.10
+ml_002,1.2.3.11
+devops_001,1.2.3.12
+qa_001,1.2.3.13
+pm_001,1.2.3.14
+designer_001,1.2.3.15
+writer_001,1.2.3.16
+gtm_001,1.2.3.17
+cs_001,1.2.3.18
+database_001,1.2.3.19
