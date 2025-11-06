@@ -2,18 +2,21 @@
 
 ## At a Glance
 
-| Feature | Telegram Bot | Web Dashboard | Render.com |
-|---------|-------------|---------------|------------|
-| **Best For** | Day-to-day management | Monitoring & analysis | Emergency access |
-| **Mobile Access** | ✅ Perfect | ⚠️ Works but small | ✅ Yes |
-| **Talk to Agents** | ✅ Yes | ❌ No | ❌ No |
-| **Approve Deployments** | ✅ Yes | ❌ No | ❌ No |
-| **View Status** | ✅ Yes | ✅ Yes | ✅ Logs only |
-| **Control System** | ✅ Pause/Resume | ❌ Read-only | ✅ Restart services |
-| **Activate Mangoes** | ✅ Yes | ❌ No | ❌ No |
-| **View Metrics** | ✅ Yes | ✅ Better viz | ⚠️ Raw logs |
-| **Real-Time** | ✅ Instant | ✅ 10sec refresh | ✅ Live logs |
-| **Ease of Use** | 🥇 Chat interface | 🥈 Visual | 🥉 Technical |
+| Feature | Telegram Bot | Web Dashboard | Cursor AI | Render.com |
+|---------|-------------|---------------|-----------|------------|
+| **Best For** | Day-to-day mgmt | Monitoring | Strategic analysis | Emergency |
+| **Mobile Access** | ✅ Perfect | ⚠️ Works | ❌ Desktop only | ✅ Yes |
+| **Talk to Agents** | ✅ Yes | ❌ No | ⚠️ Via logs | ❌ No |
+| **Approve Deploys** | ✅ Yes | ❌ No | ❌ No | ❌ No |
+| **View Status** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Logs |
+| **Control System** | ✅ Pause/Resume | ❌ Read-only | ❌ Read-only | ✅ Restart |
+| **Activate Mangoes** | ✅ Yes | ❌ No | ❌ No | ❌ No |
+| **View Metrics** | ✅ Yes | ✅ Better viz | ✅✅ AI analysis | ⚠️ Raw |
+| **Real-Time** | ✅ Instant | ✅ 10s refresh | ✅ On demand | ✅ Live |
+| **Intelligence** | ⚠️ Marcus | ❌ None | ✅✅ AI-powered | ❌ None |
+| **Pattern Recognition** | ❌ No | ⚠️ Basic | ✅✅ Advanced | ❌ No |
+| **Code Fixes** | ❌ No | ❌ No | ✅✅ Yes | ❌ No |
+| **Ease of Use** | 🥇 Chat | 🥈 Visual | 🥉 Tech-savvy | Technical |
 
 ---
 
@@ -81,6 +84,43 @@
 - Environment health
 - Performance metrics
 - Task timeline
+
+---
+
+### Cursor AI 🤖
+
+**Pros:**
+- ✅✅ AI-powered log analysis
+- ✅✅ Pattern recognition
+- ✅✅ Predictive insights
+- ✅✅ Code-aware troubleshooting
+- ✅✅ Natural language queries
+- ✅✅ Suggests + writes code fixes
+- ✅ Combines logs + metrics + code
+
+**Cons:**
+- ❌ Desktop only (not mobile)
+- ❌ Can't control system (pause/resume)
+- ❌ Can't approve deployments
+- ⚠️ Requires technical understanding
+
+**Best Use Cases:**
+- Weekly performance reviews
+- Root cause analysis
+- Pattern identification
+- Code optimization
+- Predictive forecasting
+- Complex troubleshooting
+- Strategic planning
+
+**Example Prompts:**
+```
+"Analyze my orchestrator's performance this week"
+"Why is memory usage increasing?"
+"Find patterns in these errors"
+"Optimize this code based on logs"
+"Predict when I'll need to scale"
+```
 
 ---
 
@@ -187,9 +227,10 @@
 ## 80/20 Rule
 
 **You'll spend:**
-- 80% time: Telegram (quick checks, commands, talking to Marcus)
-- 15% time: Dashboard (analysis, monitoring trends)
-- 5% time: Render (emergencies, troubleshooting)
+- 70% time: Telegram (quick checks, commands, talking to Marcus)
+- 15% time: Dashboard (visual monitoring, demos)
+- 10% time: Cursor AI (weekly analysis, optimization)
+- 5% time: Render (emergencies only)
 
 **Why:**
 - Telegram is fastest for 90% of tasks
