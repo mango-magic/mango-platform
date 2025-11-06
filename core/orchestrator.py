@@ -210,6 +210,7 @@ class Orchestrator:
         self.agents = {}  # agent_id -> AgentConfig (loaded from definitions)
         self.cycle_count = 0
         self.start_time = datetime.now()
+        self.last_self_eval = datetime.now()  # Track last self-evaluation
         
         # Load agent configs
         self._load_agents()
@@ -218,6 +219,8 @@ class Orchestrator:
         data_dir = Path(os.getenv('DATA_DIR', './data'))
         data_dir.mkdir(parents=True, exist_ok=True)
         self.state_file = data_dir / "state.json"
+        self.eval_dir = data_dir / "evaluations"
+        self.eval_dir.mkdir(exist_ok=True)
         self._load_state()
         
         logger.info("🥭 Orchestrator initialized with 39 agents")
@@ -246,10 +249,153 @@ class Orchestrator:
             'agents_count': len(self.agents),
             'tasks_completed': len([t for t in self.task_manager.tasks.values() 
                                    if t['status'] == 'completed']),
-            'uptime_hours': (datetime.now() - self.start_time).total_seconds() / 3600
+            'uptime_hours': (datetime.now() - self.start_time).total_seconds() / 3600,
+            'last_self_eval': self.last_self_eval.isoformat()
         }
         with open(self.state_file, 'w') as f:
             json.dump(state, f, indent=2)
+    
+    async def _self_evaluate(self):
+        """
+        Self-evaluation: Analyze if the team is performing at world-class standards.
+        Runs every hour to ensure continuous improvement.
+        """
+        now = datetime.now()
+        logger.info("🔍 Starting self-evaluation...")
+        
+        # Gather performance metrics
+        tasks = self.task_manager.tasks
+        total_tasks = len(tasks)
+        completed = len([t for t in tasks.values() if t['status'] == 'completed'])
+        in_progress = len([t for t in tasks.values() if t['status'] == 'in_progress'])
+        failed = len([t for t in tasks.values() if t['status'] == 'failed'])
+        
+        # Calculate time-based metrics
+        uptime_hours = (now - self.start_time).total_seconds() / 3600
+        tasks_per_hour = completed / uptime_hours if uptime_hours > 0 else 0
+        cycles_per_hour = self.cycle_count / uptime_hours if uptime_hours > 0 else 0
+        
+        # Get recent tasks for quality analysis
+        recent_tasks = sorted(
+            [t for t in tasks.values() if t.get('completed_at')],
+            key=lambda x: x.get('completed_at', ''),
+            reverse=True
+        )[:20]  # Last 20 completed tasks
+        
+        # Build evaluation prompt
+        evaluation_prompt = f"""
+You are evaluating an autonomous AI development team of 39 agents (15 developers + 24 specialized Mangoes).
+
+**Current Performance Metrics:**
+- Uptime: {uptime_hours:.1f} hours
+- Total Cycles: {self.cycle_count}
+- Tasks Completed: {completed}/{total_tasks}
+- Tasks In Progress: {in_progress}
+- Failed Tasks: {failed}
+- Tasks per Hour: {tasks_per_hour:.2f}
+- Cycles per Hour: {cycles_per_hour:.1f}
+
+**Recent Completed Tasks:**
+{json.dumps([{{'title': t.get('title'), 'agent': t.get('assigned_to'), 'complexity': t.get('complexity', 'unknown')} for t in recent_tasks[:10]], indent=2)}
+
+**Evaluation Criteria (World-Class Team Standards):**
+
+1. **Strategic Focus (30 points)**
+   - Are tasks aligned with high-impact goals?
+   - Is there a clear product vision?
+   - Are we building features that matter?
+   - Is there a balance between innovation and maintenance?
+
+2. **Execution Quality (25 points)**
+   - Task completion rate and velocity
+   - Technical excellence and code quality
+   - Proper testing and validation
+   - Documentation and knowledge sharing
+
+3. **Team Collaboration (20 points)**
+   - Effective communication between agents
+   - Knowledge sharing and learning
+   - Coordinated efforts on complex tasks
+   - Cross-functional collaboration
+
+4. **Innovation & Learning (15 points)**
+   - Exploring new technologies
+   - Learning from failures
+   - Adapting strategies based on results
+   - Creative problem-solving
+
+5. **Operational Excellence (10 points)**
+   - Consistent delivery rhythm
+   - Proper task prioritization
+   - Resource utilization
+   - System reliability
+
+**Your Task:**
+Provide a brutally honest evaluation of this team's performance. Score each category out of its max points.
+Then provide:
+1. Overall score out of 100
+2. Top 3 strengths
+3. Top 3 critical weaknesses
+4. 3 immediate action items to improve
+5. One ambitious goal for the next evaluation period
+
+Be critical. World-class teams don't accept mediocrity. If something is subpar, call it out.
+"""
+
+        try:
+            # Get AI evaluation
+            evaluation = await self.gemini.generate(
+                agent_id="self_evaluator",
+                system="You are a world-class engineering manager evaluating team performance. Be critical, honest, and actionable.",
+                prompt=evaluation_prompt,
+                temp=0.3  # Lower temperature for more consistent evaluation
+            )
+            
+            # Parse and structure the evaluation
+            eval_result = {
+                'timestamp': now.isoformat(),
+                'uptime_hours': uptime_hours,
+                'cycle_count': self.cycle_count,
+                'metrics': {
+                    'total_tasks': total_tasks,
+                    'completed': completed,
+                    'in_progress': in_progress,
+                    'failed': failed,
+                    'tasks_per_hour': tasks_per_hour,
+                    'cycles_per_hour': cycles_per_hour
+                },
+                'evaluation': evaluation,
+                'recent_tasks_analyzed': len(recent_tasks)
+            }
+            
+            # Save evaluation to file
+            eval_file = self.eval_dir / f"eval_{now.strftime('%Y%m%d_%H%M%S')}.json"
+            with open(eval_file, 'w') as f:
+                json.dump(eval_result, f, indent=2)
+            
+            logger.info("✅ Self-evaluation completed and saved")
+            logger.info(f"📊 Evaluation Preview:\n{evaluation[:500]}...")
+            
+            # Send notification with summary
+            await self.telegram.send_message(
+                f"🔍 <b>Self-Evaluation Complete</b>\n\n"
+                f"📊 <b>Metrics:</b>\n"
+                f"• Tasks: {completed}/{total_tasks} completed\n"
+                f"• Velocity: {tasks_per_hour:.1f} tasks/hour\n"
+                f"• Uptime: {uptime_hours:.1f}h\n\n"
+                f"📝 <b>Evaluation Summary:</b>\n"
+                f"{evaluation[:400]}...\n\n"
+                f"💾 Full report saved to evaluations/"
+            )
+            
+            # Update last evaluation time
+            self.last_self_eval = now
+            
+            return eval_result
+            
+        except Exception as e:
+            logger.error(f"❌ Self-evaluation failed: {e}")
+            return None
     
     async def run_forever(self):
         """Main loop - runs forever"""
@@ -279,7 +425,13 @@ class Orchestrator:
                 # Phase 2: Execute all pending tasks in parallel
                 await self._execute_all_tasks()
                 
-                # Phase 3: Save state
+                # Phase 3: Self-evaluation (every hour)
+                time_since_eval = (datetime.now() - self.last_self_eval).total_seconds() / 3600
+                if time_since_eval >= 1.0:  # Every hour
+                    logger.info("⏰ One hour elapsed - triggering self-evaluation")
+                    await self._self_evaluate()
+                
+                # Phase 4: Save state
                 self._save_state()
                 
                 # Calculate cycle duration

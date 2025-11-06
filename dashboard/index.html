@@ -263,6 +263,11 @@
             <span>Recent Activity</span>
         </div>
         
+        <div class="sidebar-item" onclick="showView('evaluations')">
+            <span class="sidebar-icon">🔍</span>
+            <span>Self-Evaluations</span>
+        </div>
+        
         <div class="sidebar-item" onclick="showView('settings')">
             <span class="sidebar-icon">⚙️</span>
             <span>Settings</span>
@@ -394,6 +399,22 @@
             <div id="activityFeed"></div>
         </div>
         
+        <!-- Self-Evaluations View -->
+        <div id="evaluations" class="view">
+            <h1>Self-Evaluations</h1>
+            <p style="color: rgba(255,255,255,0.8); margin-bottom: 24px;">Hourly performance analysis by the team itself</p>
+            
+            <div class="card" id="latestEvalCard" style="margin-bottom: 24px;">
+                <h2>Latest Evaluation</h2>
+                <div id="latestEval">Loading...</div>
+            </div>
+            
+            <div class="card">
+                <h2>Evaluation History</h2>
+                <div id="evalHistory">Loading...</div>
+            </div>
+        </div>
+        
         <!-- Settings View -->
         <div id="settings" class="view">
             <h1>Settings</h1>
@@ -429,6 +450,7 @@
             if (viewName === 'pending') loadPendingTasks();
             if (viewName === 'analytics') loadAnalytics();
             if (viewName === 'activity') loadActivity();
+            if (viewName === 'evaluations') loadEvaluations();
         }
         
         // Load dashboard stats
@@ -641,6 +663,92 @@
                 `).join('');
             } catch (error) {
                 console.error('Error loading activity:', error);
+            }
+        }
+        
+        // Load evaluations
+        async function loadEvaluations() {
+            try {
+                // Load latest evaluation
+                const latestResp = await fetch('/api/evaluations/latest');
+                const latest = await latestResp.json();
+                
+                const latestDiv = document.getElementById('latestEval');
+                if (latest.error) {
+                    latestDiv.innerHTML = '<p style="color: #6b7280;">No evaluations yet. First evaluation will run after 1 hour of uptime.</p>';
+                } else {
+                    const metrics = latest.metrics || {};
+                    latestDiv.innerHTML = `
+                        <div style="background: #f9fafb; padding: 20px; border-radius: 12px; margin-bottom: 16px; border-left: 4px solid #667eea;">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 16px;">
+                                <div>
+                                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Completed Tasks</div>
+                                    <div style="font-size: 24px; font-weight: 700; color: #1f2937;">${metrics.completed || 0}/${metrics.total_tasks || 0}</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Velocity</div>
+                                    <div style="font-size: 24px; font-weight: 700; color: #1f2937;">${(metrics.tasks_per_hour || 0).toFixed(1)}</div>
+                                    <div style="font-size: 12px; color: #9ca3af;">tasks/hour</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Uptime</div>
+                                    <div style="font-size: 24px; font-weight: 700; color: #1f2937;">${(latest.uptime_hours || 0).toFixed(1)}h</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Cycles</div>
+                                    <div style="font-size: 24px; font-weight: 700; color: #1f2937;">${latest.cycle_count || 0}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="background: white; padding: 20px; border-radius: 12px; border: 1px solid #e5e7eb;">
+                            <h3 style="margin-bottom: 12px; color: #1f2937; font-size: 16px;">Evaluation Report</h3>
+                            <div style="white-space: pre-wrap; font-family: monospace; font-size: 13px; color: #374151; line-height: 1.6;">${latest.evaluation || 'Loading...'}</div>
+                            <div style="margin-top: 16px; font-size: 12px; color: #9ca3af;">
+                                Evaluated at: ${new Date(latest.timestamp).toLocaleString()}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // Load evaluation history
+                const historyResp = await fetch('/api/evaluations?limit=10');
+                const history = await historyResp.json();
+                
+                const historyDiv = document.getElementById('evalHistory');
+                if (!history || history.length === 0) {
+                    historyDiv.innerHTML = '<p style="color: #6b7280;">No evaluation history yet.</p>';
+                } else {
+                    historyDiv.innerHTML = history.map(eval => {
+                        const metrics = eval.metrics || {};
+                        return `
+                            <div style="background: #f9fafb; padding: 16px; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid #667eea;">
+                                <div style="display: flex; justify-content: between; align-items: start; margin-bottom: 8px;">
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600; color: #1f2937; margin-bottom: 4px;">
+                                            Evaluation ${eval.id.replace('eval_', '')}
+                                        </div>
+                                        <div style="font-size: 12px; color: #6b7280;">
+                                            ${new Date(eval.timestamp).toLocaleString()}
+                                        </div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-size: 12px; color: #6b7280;">Tasks/Hour</div>
+                                        <div style="font-size: 20px; font-weight: 700; color: #667eea;">
+                                            ${(metrics.tasks_per_hour || 0).toFixed(1)}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="font-size: 13px; color: #6b7280;">
+                                    ${metrics.completed || 0} tasks completed • ${(eval.uptime_hours || 0).toFixed(1)}h uptime
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+                
+            } catch (error) {
+                console.error('Error loading evaluations:', error);
+                document.getElementById('latestEval').innerHTML = '<p style="color: #ef4444;">Error loading evaluations</p>';
             }
         }
         

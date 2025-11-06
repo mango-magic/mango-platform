@@ -248,6 +248,42 @@ async def get_recent_activity(limit: int = 20):
     
     return activity
 
+@app.get("/api/evaluations")
+async def get_evaluations(limit: int = 10):
+    """Get self-evaluation reports"""
+    eval_dir = DATA_DIR / "evaluations"
+    if not eval_dir.exists():
+        return []
+    
+    evals = []
+    for eval_file in sorted(eval_dir.glob("eval_*.json"), reverse=True)[:limit]:
+        with open(eval_file) as f:
+            eval_data = json.load(f)
+            evals.append({
+                "id": eval_file.stem,
+                "timestamp": eval_data.get('timestamp'),
+                "metrics": eval_data.get('metrics'),
+                "evaluation": eval_data.get('evaluation'),
+                "uptime_hours": eval_data.get('uptime_hours'),
+                "cycle_count": eval_data.get('cycle_count')
+            })
+    
+    return evals
+
+@app.get("/api/evaluations/latest")
+async def get_latest_evaluation():
+    """Get the most recent self-evaluation"""
+    eval_dir = DATA_DIR / "evaluations"
+    if not eval_dir.exists():
+        return {"error": "No evaluations found"}
+    
+    eval_files = sorted(eval_dir.glob("eval_*.json"), reverse=True)
+    if not eval_files:
+        return {"error": "No evaluations found"}
+    
+    with open(eval_files[0]) as f:
+        return json.load(f)
+
 @app.get("/")
 async def dashboard():
     """Serve the main dashboard HTML"""
