@@ -380,6 +380,12 @@ Generate tasks NOW:"""
         for task in self.task_manager.tasks.values():
             if task['status'] == 'pending':
                 agent_id = task['assigned_to']
+                
+                # Skip if agent is not active (inactive Mangoes)
+                if agent_id in self.agents and not self.agents[agent_id].active:
+                    logger.info(f"⏸️  Skipping task for inactive agent: {agent_id}")
+                    continue
+                
                 if agent_id not in agent_tasks:
                     agent_tasks[agent_id] = []
                 agent_tasks[agent_id].append(task)
