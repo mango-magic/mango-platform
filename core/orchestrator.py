@@ -296,7 +296,7 @@ You are evaluating an autonomous AI development team of 39 agents (15 developers
 - Cycles per Hour: {cycles_per_hour:.1f}
 
 **Recent Completed Tasks:**
-{json.dumps([{{'title': t.get('title'), 'agent': t.get('assigned_to'), 'complexity': t.get('complexity', 'unknown')} for t in recent_tasks[:10]], indent=2)}
+{json.dumps([{'title': t.get('title'), 'agent': t.get('assigned_to'), 'complexity': t.get('complexity', 'unknown')} for t in recent_tasks[:10]], indent=2)}
 
 **Evaluation Criteria (World-Class Team Standards):**
 
