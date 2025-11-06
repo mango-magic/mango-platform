@@ -98,7 +98,8 @@ class GeminiClient:
     
     def __init__(self):
         genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-        self.model = genai.GenerativeModel('gemini-1.5-pro')
+        # Use gemini-1.5-flash for free tier (faster, cheaper, available)
+        self.model = genai.GenerativeModel('gemini-1.5-flash')
         self.limiter = GeminiRateLimiter()
         self.cache = {}  # Simple cache
         
@@ -514,6 +515,41 @@ Execute now:"""
 
 async def main():
     """Entry point"""
+    # Start HTTP health check server in background for Render port requirement
+    import threading
+    import uvicorn
+    from fastapi import FastAPI
+    
+    app = FastAPI()
+    
+    @app.get("/")
+    @app.get("/health")
+    async def health():
+        return {
+            "status": "running",
+            "service": "mango-orchestrator",
+            "agents": 39
+        }
+    
+    @app.get("/status")
+    async def status():
+        return {
+            "status": "operational",
+            "agents_loaded": 39,
+            "service": "The Mangoes AI Team"
+        }
+    
+    def run_server():
+        port = int(os.getenv('PORT', 10000))
+        uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
+    
+    # Start server in background thread
+    server_thread = threading.Thread(target=run_server, daemon=True)
+    server_thread.start()
+    
+    logger.info(f"🌐 HTTP server started on port {os.getenv('PORT', 10000)}")
+    
+    # Run orchestrator in main thread
     orchestrator = Orchestrator()
     await orchestrator.run_forever()
 
