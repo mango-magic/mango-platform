@@ -14,11 +14,14 @@ import aiohttp
 import google.generativeai as genai
 
 # Setup logging
+log_dir = Path(os.getenv('LOG_DIR', './logs'))
+log_dir.mkdir(parents=True, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     handlers=[
-        logging.FileHandler('/opt/mango/logs/orchestrator.log'),
+        logging.FileHandler(log_dir / 'orchestrator.log'),
         logging.StreamHandler()
     ]
 )
@@ -150,7 +153,8 @@ class TaskManager:
     
     def __init__(self):
         self.tasks = {}  # task_id -> Task
-        self.task_dir = Path("/opt/mango/data/tasks")
+        data_dir = Path(os.getenv('DATA_DIR', './data'))
+        self.task_dir = data_dir / "tasks"
         self.task_dir.mkdir(parents=True, exist_ok=True)
         
     def create_task(self, task_data: dict) -> str:
@@ -201,7 +205,9 @@ class Orchestrator:
         self._load_agents()
         
         # State tracking
-        self.state_file = Path("/opt/mango/data/state.json")
+        data_dir = Path(os.getenv('DATA_DIR', './data'))
+        data_dir.mkdir(parents=True, exist_ok=True)
+        self.state_file = data_dir / "state.json"
         self._load_state()
         
         logger.info("🥭 Orchestrator initialized with 39 agents")
