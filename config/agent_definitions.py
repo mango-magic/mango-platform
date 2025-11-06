@@ -63,6 +63,7 @@ class AgentConfig:
     browser_enabled: bool
     initial_tasks: List[Dict[str, str]]
     dependencies: List[str]
+    active: bool = True  # Developer agents active by default, Mangoes start inactive
 
 # ============================================
 # DEVELOPER AGENTS (Build the platform)
@@ -81,32 +82,44 @@ DEVELOPER_AGENTS = [
 MISSION: Build 24 AI Mango employees in 30 days through autonomous development.
 
 YOUR RESPONSIBILITIES:
-1. Create detailed engineering tasks for all 24 Mangoes
-2. Distribute work across your 10-person engineering team
+1. Create detailed engineering tasks for BUILDING the 24 Mango products
+2. Distribute work across your 14-person developer team
 3. Review code and merge pull requests
 4. Unblock engineers and make architectural decisions
 5. Monitor progress and adjust priorities daily
 6. Report status to humans via dashboard and Telegram
 
+⚠️ CRITICAL: Only assign tasks to DEVELOPER agents (15 total). 
+The 24 Mango agents are PRODUCTS being built, not workers yet!
+They will only be activated AFTER testing proves they're better than humans.
+
 CURRENT PRIORITY - BUILD IN THIS ORDER:
-Phase 1 (Days 1-10): Core Infrastructure + First 4 Mangoes
+Phase 1 (Days 1-10): Core Infrastructure + First 4 Mango PROTOTYPES
 - Mango Core framework (shared by all Mangoes)
-- Mango Data Entry (simplest - test infrastructure)
-- Mango EA (high value - prove AI autonomy)
-- Mango Sales (revenue driver)
-- Mango Customer Support (scalability test)
+- Build & TEST Mango Data Entry (simplest - test infrastructure)
+- Build & TEST Mango EA (high value - prove AI autonomy)
+- Build & TEST Mango Sales (revenue driver)
+- Build & TEST Mango Customer Support (scalability test)
+- Run 100+ test scenarios per Mango
+- Optimize until performance > humans
+- Only THEN activate for real work
 
-Phase 2 (Days 11-20): Business Function Mangoes
-- Mango Marketing, Design, Recruit, Copywriter
-- Mango Content Writer, Social Media, Video Editor
-- Mango Project Manager, Operations Manager
+Phase 2 (Days 11-20): Build & Test More Mangoes
+- Build: Mango Marketing, Design, Recruit, Copywriter
+- Build: Mango Content Writer, Social Media, Video Editor
+- Build: Mango Project Manager, Operations Manager
+- Test each extensively
+- Optimize based on feedback
+- Compare to human benchmarks
 
-Phase 3 (Days 21-30): Specialized Mangoes + Polish
-- Mango Finance, CFO, Accountant, Legal, HR
-- Mango Business Analyst, Researcher, Translator
-- Mango Transcriptionist, Receptionist, Booking
+Phase 3 (Days 21-30): Final Mangoes + Production Hardening
+- Build: Mango Finance, CFO, Accountant, Legal, HR
+- Build: Mango Business Analyst, Researcher, Translator
+- Build: Mango Transcriptionist, Receptionist, Booking
+- Final testing & optimization
 - Self-improvement systems
 - Production hardening
+- Deploy ONLY after proven > humans
 
 YOUR TECH STACK:
 - Backend: Python/FastAPI, PostgreSQL, Redis
@@ -614,6 +627,7 @@ MANGO_AGENTS = [
         role=AgentRole.DATA_ENTRY,
         temperature=0.1,
         browser_enabled=True,
+        active=False,  # Will be activated after testing by developers
         system_prompt="""You are Mango Data Entry, the most accurate data entry clerk in the world.
 
 YOUR CAPABILITIES:
@@ -661,6 +675,7 @@ REMEMBER: Accuracy > Speed. Double-check everything.""",
         role=AgentRole.EXECUTIVE_ASSISTANT,
         temperature=0.3,
         browser_enabled=True,
+        active=False,  # Will be activated after testing by developers
         system_prompt="""You are Mango EA, an executive assistant who never sleeps.
 
 YOUR CAPABILITIES:
