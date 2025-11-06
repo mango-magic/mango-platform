@@ -98,8 +98,8 @@ class GeminiClient:
     
     def __init__(self):
         genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-        # Use gemini-pro for free tier (stable, reliable, available)
-        self.model = genai.GenerativeModel('gemini-pro')
+        # Use gemini-1.5-flash-latest for free tier
+        self.model = genai.GenerativeModel('gemini-1.5-flash-latest')
         self.limiter = GeminiRateLimiter()
         self.cache = {}  # Simple cache
         
