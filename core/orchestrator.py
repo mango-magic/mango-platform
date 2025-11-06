@@ -220,6 +220,13 @@ class Orchestrator:
             github_token=os.getenv('GITHUB_TOKEN', '')
         )
         
+        # Interactive Telegram bot
+        from core.telegram_bot import TelegramBot
+        self.telegram_bot = TelegramBot(
+            token=os.getenv('TELEGRAM_TOKEN', ''),
+            orchestrator_ref=self
+        )
+        
         # Load agent configs
         self._load_agents()
         
@@ -461,11 +468,17 @@ Be critical. World-class teams don't accept mediocrity. If something is subpar, 
         """Main loop - runs forever"""
         logger.info("🚀 Starting infinite autonomous loop...")
         
+        # Start interactive Telegram bot in background
+        if self.telegram_bot.token:
+            asyncio.create_task(self.telegram_bot.start())
+            logger.info("🤖 Interactive Telegram bot started")
+        
         # Send startup notification
         await self.telegram.send_message(
             "🥭 <b>ManyMangoes AI Team Started!</b>\n"
             f"39 agents activated\n"
-            f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            f"💬 <b>Interactive bot active!</b> Send /help to get started."
         )
         
         while True:
