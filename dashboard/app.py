@@ -284,6 +284,38 @@ async def get_latest_evaluation():
     with open(eval_files[0]) as f:
         return json.load(f)
 
+@app.get("/api/improvements")
+async def get_improvement_cycles(limit: int = 10):
+    """Get self-improvement cycle history"""
+    improvements_dir = DATA_DIR / "improvements"
+    if not improvements_dir.exists():
+        return []
+    
+    cycles = []
+    for cycle_file in sorted(improvements_dir.glob("cycle_*.json"), reverse=True)[:limit]:
+        with open(cycle_file) as f:
+            cycle_data = json.load(f)
+            cycles.append({
+                "cycle_id": cycle_data.get('cycle_id'),
+                "timestamp": cycle_data.get('timestamp'),
+                "status": cycle_data.get('status'),
+                "improvements_count": len(cycle_data.get('improvements_generated', {}).get('improvements', [])),
+                "agent_approval_rate": cycle_data.get('test_analysis', {}).get('approval_rate', 0),
+                "deployed": cycle_data.get('status') == 'deployed'
+            })
+    
+    return cycles
+
+@app.get("/api/improvements/{cycle_id}")
+async def get_improvement_cycle(cycle_id: str):
+    """Get detailed information about a specific improvement cycle"""
+    cycle_file = DATA_DIR / "improvements" / f"cycle_{cycle_id}.json"
+    if not cycle_file.exists():
+        raise HTTPException(status_code=404, detail="Improvement cycle not found")
+    
+    with open(cycle_file) as f:
+        return json.load(f)
+
 @app.get("/")
 async def dashboard():
     """Serve the main dashboard HTML"""

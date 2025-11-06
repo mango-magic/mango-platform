@@ -212,6 +212,14 @@ class Orchestrator:
         self.start_time = datetime.now()
         self.last_self_eval = datetime.now()  # Track last self-evaluation
         
+        # Self-improvement system
+        from core.self_improvement import SelfImprovementCycle
+        self.self_improvement = SelfImprovementCycle(
+            gemini_client=self.gemini,
+            data_dir=data_dir,
+            github_token=os.getenv('GITHUB_TOKEN', '')
+        )
+        
         # Load agent configs
         self._load_agents()
         
@@ -391,11 +399,63 @@ Be critical. World-class teams don't accept mediocrity. If something is subpar, 
             # Update last evaluation time
             self.last_self_eval = now
             
+            # Trigger self-improvement cycle if score is below 85
+            score = self._extract_score_from_eval(evaluation)
+            if score < 85:
+                logger.info(f"📊 Score {score}/100 - Triggering self-improvement cycle...")
+                asyncio.create_task(self._run_improvement_cycle(eval_result))
+            else:
+                logger.info(f"✨ Score {score}/100 - Excellent! No improvements needed.")
+            
             return eval_result
             
         except Exception as e:
             logger.error(f"❌ Self-evaluation failed: {e}")
             return None
+    
+    def _extract_score_from_eval(self, evaluation_text: str) -> int:
+        """Extract numeric score from evaluation"""
+        import re
+        match = re.search(r'OVERALL SCORE:?\s*(\d+)/100', evaluation_text, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+        return 85  # Default to passing score if can't parse
+    
+    async def _run_improvement_cycle(self, evaluation: Dict):
+        """
+        Run the complete self-improvement cycle:
+        1. Generate improvements
+        2. Deploy to test
+        3. Get agent feedback
+        4. Analyze results
+        5. Deploy to production if passed
+        """
+        try:
+            logger.info("🔄 Starting self-improvement cycle...")
+            
+            result = await self.self_improvement.run_improvement_cycle(evaluation)
+            
+            if result:
+                if result['status'] == 'deployed':
+                    await self.telegram.send_message(
+                        f"🎉 <b>Self-Improvement Deployed!</b>\n\n"
+                        f"📊 Cycle: {result['cycle_id']}\n"
+                        f"✅ Tests passed: {result['test_analysis']['yes_votes']}/16 agents approved\n"
+                        f"🚀 Production deployment: SUCCESSFUL\n\n"
+                        f"The team has improved itself and deployed to production automatically!"
+                    )
+                elif result['status'] == 'failed':
+                    await self.telegram.send_message(
+                        f"⚠️ <b>Self-Improvement Attempt Failed</b>\n\n"
+                        f"📊 Cycle: {result['cycle_id']}\n"
+                        f"❌ Reasons:\n" + "\n".join(f"• {r}" for r in result.get('reasons', []))
+                    )
+            
+        except Exception as e:
+            logger.error(f"❌ Self-improvement cycle error: {e}")
+            await self.telegram.send_message(
+                f"❌ <b>Self-Improvement Error</b>\n\n{str(e)}"
+            )
     
     async def run_forever(self):
         """Main loop - runs forever"""
