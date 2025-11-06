@@ -6,6 +6,7 @@ Run this on the orchestrator VPS.
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 import json
+import os
 from pathlib import Path
 from datetime import datetime
 
@@ -16,7 +17,8 @@ async def dashboard():
     """Real-time dashboard"""
     
     # Load state
-    state_file = Path("/opt/mango/data/state.json")
+    data_dir = Path(os.getenv('DATA_DIR', './data'))
+    state_file = data_dir / "state.json"
     if state_file.exists():
         with open(state_file) as f:
             state = json.load(f)
@@ -24,7 +26,7 @@ async def dashboard():
         state = {"status": "initializing"}
     
     # Count tasks
-    tasks_dir = Path("/opt/mango/data/tasks")
+    tasks_dir = data_dir / "tasks"
     total_tasks = len(list(tasks_dir.glob("*.json"))) if tasks_dir.exists() else 0
     
     completed_tasks = 0
