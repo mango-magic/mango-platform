@@ -197,6 +197,15 @@ class Orchestrator:
         self.gemini = GeminiClient()
         self.task_manager = TaskManager()
         self.telegram = TelegramNotifier(os.getenv('TELEGRAM_TOKEN'))
+        
+        # Team collaboration systems
+        data_dir = Path(os.getenv('DATA_DIR', './data'))
+        from core.team_communication import TeamCommunication
+        from core.environments import EnvironmentManager
+        
+        self.team_comm = TeamCommunication(data_dir)
+        self.env_manager = EnvironmentManager(data_dir)
+        
         self.agents = {}  # agent_id -> AgentConfig (loaded from definitions)
         self.cycle_count = 0
         self.start_time = datetime.now()
