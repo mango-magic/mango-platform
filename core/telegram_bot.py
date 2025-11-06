@@ -73,32 +73,49 @@ class TelegramBot:
     
     async def _handle_update(self, update: Dict):
         """Handle a single update"""
-        if 'message' not in update:
-            return
-        
-        message = update['message']
-        chat_id = message['chat']['id']
-        text = message.get('text', '').strip()
-        
-        if not text:
-            return
-        
-        # Check if it's a command
-        if text.startswith('/'):
-            command = text.split()[0].lower()
-            if command in self.commands:
-                response = await self.commands[command](chat_id, text)
-                await self._send_message(chat_id, response)
+        try:
+            if 'message' not in update:
+                return
+            
+            message = update['message']
+            chat_id = message['chat']['id']
+            text = message.get('text', '').strip()
+            
+            if not text:
+                return
+            
+            # Check if it's a command
+            if text.startswith('/'):
+                command = text.split()[0].lower()
+                if command in self.commands:
+                    try:
+                        response = await self.commands[command](chat_id, text)
+                        await self._send_message(chat_id, response)
+                    except Exception as e:
+                        logger.error(f"Error handling command {command}: {e}")
+                        await self._send_message(
+                            chat_id,
+                            f"❌ Error processing command: {str(e)}\n\nPlease try again or use /help."
+                        )
+                else:
+                    await self._send_message(
+                        chat_id,
+                        "❓ Unknown command. Use /help to see available commands."
+                    )
             else:
-                await self._send_message(
-                    chat_id,
-                    "❓ Unknown command. Use /help to see available commands."
-                )
-        else:
-            # Handle natural language questions
-            response = await self._handle_question(chat_id, text)
-            if response:
-                await self._send_message(chat_id, response)
+                # Handle natural language questions
+                try:
+                    response = await self._handle_question(chat_id, text)
+                    if response:
+                        await self._send_message(chat_id, response)
+                except Exception as e:
+                    logger.error(f"Error handling question: {e}")
+                    await self._send_message(
+                        chat_id,
+                        f"❌ Error processing question. Try using a command like /status or /help."
+                    )
+        except Exception as e:
+            logger.error(f"Error in _handle_update: {e}")
     
     async def _send_message(self, chat_id: int, text: str, parse_mode: str = "HTML"):
         """Send a message to Telegram"""
@@ -215,45 +232,58 @@ Type /agents for detailed agent status.
         if not self.orchestrator:
             return "⚠️ Orchestrator not available"
         
-        agents = self._get_agents()
-        
-        # Group by type
-        developers = [a for a in agents if a.get('type') == 'developer']
-        mangoes = [a for a in agents if a.get('type') == 'mango']
-        
-        response = f"""
+        try:
+            agents = self._get_agents()
+            
+            if not agents or len(agents) == 0:
+                return "⚠️ No agents found. The orchestrator may still be initializing."
+            
+            # Group by type (ensure type is string)
+            developers = [a for a in agents if str(a.get('type', '')).lower() == 'developer']
+            mangoes = [a for a in agents if str(a.get('type', '')).lower() == 'mango']
+            
+            response = f"""
 👥 <b>All Agents ({len(agents)} total)</b>
 
 <b>Developers ({len(developers)}):</b>
 """
-        
-        for agent in developers[:10]:  # Show first 10
-            emoji = agent.get('emoji', '👤')
-            name = agent.get('name', 'Unknown')
-            role = agent.get('role', 'Unknown')
-            status = agent.get('status', 'unknown')
-            status_emoji = '🟢' if status == 'active' else '🔴'
-            response += f"{status_emoji} {emoji} <b>{name}</b> - {role}\n"
-        
-        if len(developers) > 10:
-            response += f"... and {len(developers) - 10} more developers\n"
-        
-        response += f"\n<b>Mangoes ({len(mangoes)}):</b>\n"
-        
-        for agent in mangoes[:10]:  # Show first 10
-            emoji = agent.get('emoji', '🥭')
-            name = agent.get('name', 'Unknown')
-            role = agent.get('role', 'Unknown')
-            status = agent.get('status', 'unknown')
-            status_emoji = '🟢' if status == 'active' else '🔴'
-            response += f"{status_emoji} {emoji} <b>{name}</b> - {role}\n"
-        
-        if len(mangoes) > 10:
-            response += f"... and {len(mangoes) - 10} more Mangoes\n"
-        
-        response += "\nType /team for detailed breakdown by role."
-        
-        return response
+            
+            if len(developers) == 0:
+                response += "No developers found.\n"
+            else:
+                for agent in developers[:10]:  # Show first 10
+                    emoji = agent.get('emoji', '👤')
+                    name = agent.get('name', 'Unknown')
+                    role = str(agent.get('role', 'Unknown'))
+                    status = agent.get('status', 'unknown')
+                    status_emoji = '🟢' if status == 'active' else '🔴'
+                    response += f"{status_emoji} {emoji} <b>{name}</b> - {role}\n"
+                
+                if len(developers) > 10:
+                    response += f"... and {len(developers) - 10} more developers\n"
+            
+            response += f"\n<b>Mangoes ({len(mangoes)}):</b>\n"
+            
+            if len(mangoes) == 0:
+                response += "No Mangoes found.\n"
+            else:
+                for agent in mangoes[:10]:  # Show first 10
+                    emoji = agent.get('emoji', '🥭')
+                    name = agent.get('name', 'Unknown')
+                    role = str(agent.get('role', 'Unknown'))
+                    status = agent.get('status', 'unknown')
+                    status_emoji = '🟢' if status == 'active' else '🔴'
+                    response += f"{status_emoji} {emoji} <b>{name}</b> - {role}\n"
+                
+                if len(mangoes) > 10:
+                    response += f"... and {len(mangoes) - 10} more Mangoes\n"
+            
+            response += "\nType /team for detailed breakdown by role."
+            
+            return response
+        except Exception as e:
+            logger.error(f"Error in _handle_agents: {e}")
+            return f"❌ Error getting agents: {str(e)}"
     
     async def _handle_tasks(self, chat_id: int, text: str) -> str:
         """Handle /tasks command"""
@@ -425,17 +455,20 @@ Type /evaluation for full evaluation details.
         """Handle /team command"""
         agents = self._get_agents()
         
-        # Group by role
+        # Group by role (ensure role is always a string)
         by_role = {}
         for agent in agents:
             role = agent.get('role', 'Unknown')
-            if role not in by_role:
-                by_role[role] = []
-            by_role[role].append(agent)
+            # Convert to string if it's an enum or other object
+            role_str = str(role) if role else 'Unknown'
+            if role_str not in by_role:
+                by_role[role_str] = []
+            by_role[role_str].append(agent)
         
         response = "👥 <b>Team Breakdown by Role</b>\n\n"
         
-        for role, role_agents in sorted(by_role.items()):
+        # Sort by role name (string) to avoid comparison errors
+        for role, role_agents in sorted(by_role.items(), key=lambda x: x[0]):
             response += f"<b>{role} ({len(role_agents)}):</b>\n"
             for agent in role_agents[:5]:  # Show first 5 per role
                 emoji = agent.get('emoji', '👤')
@@ -515,34 +548,48 @@ Type /evaluation for full evaluation details.
         
         # Load from agent definitions or orchestrator
         try:
+            # Try orchestrator first
             if hasattr(self.orchestrator, 'agents') and self.orchestrator.agents:
                 agents = []
                 for agent_id, agent_config in self.orchestrator.agents.items():
+                    # Ensure all values are strings to avoid comparison issues
+                    role = agent_config.role if hasattr(agent_config, 'role') else 'Unknown'
+                    type_val = agent_config.type if hasattr(agent_config, 'type') else 'unknown'
+                    
                     agents.append({
-                        'id': agent_id,
-                        'name': agent_config.name if hasattr(agent_config, 'name') else agent_id,
-                        'role': agent_config.role if hasattr(agent_config, 'role') else 'Unknown',
-                        'type': agent_config.type if hasattr(agent_config, 'type') else 'unknown',
+                        'id': str(agent_id),
+                        'name': str(agent_config.name if hasattr(agent_config, 'name') else agent_id),
+                        'role': str(role),
+                        'type': str(type_val),
                         'status': 'active',
-                        'emoji': getattr(agent_config, 'emoji', '👤')
+                        'emoji': str(getattr(agent_config, 'emoji', '👤'))
                     })
                 return agents
-            else:
-                # Fallback: load from definitions
+            
+            # Fallback: load from definitions
+            try:
                 from config.agent_definitions import ALL_AGENTS
                 agents = []
                 for agent in ALL_AGENTS:
+                    # Ensure all values are strings
+                    role = getattr(agent, 'role', 'Unknown')
+                    type_val = getattr(agent, 'type', 'unknown')
+                    
                     agents.append({
-                        'id': agent.id,
-                        'name': agent.name,
-                        'role': agent.role,
-                        'type': agent.type,
+                        'id': str(getattr(agent, 'id', 'unknown')),
+                        'name': str(getattr(agent, 'name', 'Unknown')),
+                        'role': str(role),
+                        'type': str(type_val),
                         'status': 'active',
-                        'emoji': getattr(agent, 'emoji', '👤')
+                        'emoji': str(getattr(agent, 'emoji', '👤'))
                     })
                 return agents
+            except ImportError:
+                logger.warning("Could not import agent definitions")
+                return []
+                
         except Exception as e:
-            logger.error(f"Error getting agents: {e}")
+            logger.error(f"Error getting agents: {e}", exc_info=True)
             return []
     
     def _get_latest_evaluation(self) -> Dict:
