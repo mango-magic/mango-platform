@@ -1541,6 +1541,63 @@ async def main():
         
         return tasks
     
+    @app.post("/api/tasks/{task_id}/approve")
+    async def approve_task(task_id: str):
+        """Approve a task (for code reviews)"""
+        if not orchestrator_ref["instance"]:
+            raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+        
+        task_manager = orchestrator_ref["instance"].task_manager
+        if task_id not in task_manager.tasks:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        task = task_manager.tasks[task_id]
+        
+        # If task is in review, approve it and mark as completed
+        if task.get('status') == 'in_review':
+            task_manager.complete_task(task_id, "Code review approved")
+            logger.info(f"✅ Task {task_id} approved and completed")
+            return {"status": "approved", "task_id": task_id, "message": "Task approved and marked as completed"}
+        elif task.get('status') == 'pending':
+            # For pending tasks, mark as approved and move to in_progress
+            task['status'] = 'in_progress'
+            task['approved_at'] = datetime.now().isoformat()
+            task_manager._save_task(task_id)
+            logger.info(f"✅ Task {task_id} approved")
+            return {"status": "approved", "task_id": task_id, "message": "Task approved"}
+        else:
+            raise HTTPException(status_code=400, detail=f"Cannot approve task with status: {task.get('status')}")
+    
+    @app.post("/api/tasks/{task_id}/reject")
+    async def reject_task(task_id: str, reason: str = ""):
+        """Reject a task (request changes)"""
+        if not orchestrator_ref["instance"]:
+            raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+        
+        task_manager = orchestrator_ref["instance"].task_manager
+        if task_id not in task_manager.tasks:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        task = task_manager.tasks[task_id]
+        
+        # If task is in review, reject it and move back to pending
+        if task.get('status') == 'in_review':
+            task['status'] = 'pending'
+            task['review_feedback'] = reason or "Changes requested"
+            task['rejected_at'] = datetime.now().isoformat()
+            task_manager._save_task(task_id)
+            logger.info(f"❌ Task {task_id} rejected: {reason}")
+            return {"status": "rejected", "task_id": task_id, "message": "Task rejected, changes requested"}
+        elif task.get('status') == 'pending':
+            task['status'] = 'pending'
+            task['rejection_reason'] = reason or "Task rejected"
+            task['rejected_at'] = datetime.now().isoformat()
+            task_manager._save_task(task_id)
+            logger.info(f"❌ Task {task_id} rejected: {reason}")
+            return {"status": "rejected", "task_id": task_id, "message": "Task rejected"}
+        else:
+            raise HTTPException(status_code=400, detail=f"Cannot reject task with status: {task.get('status')}")
+    
     @app.get("/api/agents")
     async def get_agents(type: Optional[str] = None):
         """Get all agents"""
