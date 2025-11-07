@@ -14,6 +14,7 @@ class AgentType(Enum):
 class AgentRole(Enum):
     # Developer roles (build the platform)
     ENGINEERING_MANAGER = "engineering_manager"
+    TASK_MASTER = "task_master"
     BACKEND_ENGINEER = "backend_engineer"
     FRONTEND_ENGINEER = "frontend_engineer"
     ML_ENGINEER = "ml_engineer"
