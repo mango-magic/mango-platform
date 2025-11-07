@@ -1572,6 +1572,141 @@ async def main():
         else:
             raise HTTPException(status_code=400, detail=f"Cannot approve task with status: {task.get('status')}")
     
+    @app.get("/api/tasks/{task_id}")
+    async def get_task_detail(task_id: str):
+        """Get detailed information about a specific task"""
+        if not orchestrator_ref["instance"]:
+            raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+        
+        task_manager = orchestrator_ref["instance"].task_manager
+        if task_id not in task_manager.tasks:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        task = task_manager.tasks[task_id]
+        
+        # Try to get code review details if available
+        review_details = None
+        if task.get('review_id'):
+            team_comm = orchestrator_ref["instance"].team_comm
+            review_file = team_comm.reviews_dir / f"{task['review_id']}.json"
+            if review_file.exists():
+                with open(review_file) as f:
+                    review_details = json.load(f)
+        
+        # Parse result to extract structured data
+        result_data = None
+        if task.get('result'):
+            try:
+                result_data = json.loads(task['result'])
+            except:
+                pass
+        
+        # Build GitHub links if files_changed exist
+        github_links = []
+        
+        # Auto-detect GitHub repo from git config if not set
+        github_repo = os.getenv('GITHUB_REPO', '')
+        if not github_repo:
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ['git', 'config', '--get', 'remote.origin.url'],
+                    capture_output=True,
+                    text=True,
+                    timeout=2
+                )
+                if result.returncode == 0:
+                    git_url = result.stdout.strip()
+                    # Convert git@github.com:user/repo.git to https://github.com/user/repo
+                    if git_url.startswith('git@'):
+                        git_url = git_url.replace('git@github.com:', 'https://github.com/').replace('.git', '')
+                    elif git_url.startswith('https://github.com/'):
+                        git_url = git_url.replace('.git', '')
+                    github_repo = git_url
+            except:
+                pass
+        
+        # Get current branch for links
+        github_branch = 'main'
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            if result.returncode == 0:
+                github_branch = result.stdout.strip()
+        except:
+            pass
+        
+        if github_repo and result_data and result_data.get('files_changed'):
+            for file_path in result_data.get('files_changed', []):
+                github_links.append({
+                    'file': file_path,
+                    'url': f"{github_repo}/blob/{github_branch}/{file_path}",
+                    'raw_url': f"{github_repo}/raw/{github_branch}/{file_path}",
+                    'blame_url': f"{github_repo}/blame/{github_branch}/{file_path}",
+                    'history_url': f"{github_repo}/commits/{github_branch}/{file_path}"
+                })
+        
+        return {
+            **task,
+            'review_details': review_details,
+            'github_links': github_links,
+            'result_data': result_data
+        }
+    
+    @app.get("/api/tasks/{task_id}/files/{file_path:path}")
+    async def get_task_file_content(task_id: str, file_path: str):
+        """Get file content for a task (if file exists locally)"""
+        if not orchestrator_ref["instance"]:
+            raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+        
+        task_manager = orchestrator_ref["instance"].task_manager
+        if task_id not in task_manager.tasks:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        task = task_manager.tasks[task_id]
+        
+        # Check if file exists in workspace
+        workspace_root = Path(os.getenv('WORKSPACE_ROOT', '.'))
+        full_path = workspace_root / file_path
+        
+        if not full_path.exists() or not str(full_path).startswith(str(workspace_root)):
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        try:
+            with open(full_path, 'r') as f:
+                content = f.read()
+            
+            return {
+                'file_path': file_path,
+                'content': content,
+                'size': len(content),
+                'lines': content.count('\n') + 1
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
+    
+    @app.get("/api/reviews/{review_id}")
+    async def get_review_detail(review_id: str):
+        """Get detailed code review information"""
+        if not orchestrator_ref["instance"]:
+            raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+        
+        team_comm = orchestrator_ref["instance"].team_comm
+        review_file = team_comm.reviews_dir / f"{review_id}.json"
+        
+        if not review_file.exists():
+            raise HTTPException(status_code=404, detail="Review not found")
+        
+        with open(review_file) as f:
+            review_data = json.load(f)
+        
+        return review_data
+    
     @app.post("/api/tasks/{task_id}/reject")
     async def reject_task(task_id: str, reason: str = ""):
         """Reject a task (request changes)"""

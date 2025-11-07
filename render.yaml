@@ -10,6 +10,8 @@ services:
         value: AIzaSyA3caiS86rgxCnOWrP95WQL0C1PyBKoeoA
       - key: GITHUB_TOKEN
         sync: false
+      - key: GITHUB_REPO
+        value: https://github.com/mango-magic/mango-platform
       - key: TELEGRAM_TOKEN
         value: 7721482203:AAHEHoqnFjx_ZzEBKHT-PEHDpZNBLxOzbUE
       - key: TELEGRAM_CHAT_ID
