@@ -1628,7 +1628,7 @@ async def main():
             except:
                 pass
         
-        # Build GitHub links if files_changed exist
+        # Build GitHub links if files_changed exist OR if we have a GitHub repo
         github_links = []
         
         # Auto-detect GitHub repo from git config if not set
@@ -1668,6 +1668,7 @@ async def main():
         except:
             pass
         
+        # Build links for files_changed if they exist
         if github_repo and result_data and result_data.get('files_changed'):
             for file_path in result_data.get('files_changed', []):
                 github_links.append({
@@ -1682,7 +1683,9 @@ async def main():
             **task,
             'review_details': review_details,
             'github_links': github_links,
-            'result_data': result_data
+            'result_data': result_data,
+            'github_repo': github_repo,  # Include repo URL for frontend to use
+            'github_branch': github_branch  # Include branch for frontend
         }
     
     @app.get("/api/tasks/{task_id}/files/{file_path:path}")

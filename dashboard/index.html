@@ -2057,6 +2057,10 @@
             const githubLinks = task.github_links || [];
             const reviewDetails = task.review_details || null;
             
+            // Get GitHub repo from task data or use default
+            let githubRepo = task.github_repo || 'https://github.com/mango-magic/mango-platform';
+            let githubBranch = task.github_branch || 'main';
+            
             // Try to infer files from task description if no files_changed
             let inferredFiles = [];
             if (filesChanged.length === 0 && task.description) {
@@ -2074,15 +2078,6 @@
                 if (desc.includes('task')) {
                     inferredFiles.push('core/orchestrator.py');
                 }
-            }
-            
-            // Build GitHub repo URL for search links
-            let githubRepo = '';
-            if (githubLinks.length > 0 && githubLinks[0].url) {
-                githubRepo = githubLinks[0].url.split('/blob/')[0];
-            } else {
-                // Try to get from task data or use default
-                githubRepo = 'https://github.com/mango-magic/mango-platform';
             }
             
             const allFiles = filesChanged.length > 0 ? filesChanged : inferredFiles;
@@ -2154,8 +2149,8 @@
                             ${allFiles.map((file, idx) => {
                                 const githubLink = githubLinks.find(gl => gl.file === file);
                                 // Build GitHub URL if not in links
-                                const fileUrl = githubLink ? githubLink.url : (githubRepo ? `${githubRepo}/blob/main/${file}` : null);
-                                const historyUrl = githubLink ? githubLink.history_url : (githubRepo ? `${githubRepo}/commits/main/${file}` : null);
+                                const fileUrl = githubLink ? githubLink.url : (githubRepo ? `${githubRepo}/blob/${githubBranch}/${file}` : null);
+                                const historyUrl = githubLink ? githubLink.history_url : (githubRepo ? `${githubRepo}/commits/${githubBranch}/${file}` : null);
                                 
                                 return `
                                     <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: white; border-radius: 6px; border: 1px solid #e5e7eb;">
@@ -2173,7 +2168,7 @@
                                                         📜 History
                                                     </a>
                                                 ` : ''}
-                                            ` : ''}
+                                            ` : '<span style="color: #9ca3af; font-size: 12px;">No GitHub repo configured</span>'}
                                             <button onclick="viewFileContent('${file}', '${task.id}')" style="background: #667eea; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">View Code</button>
                                         </div>
                                     </div>
