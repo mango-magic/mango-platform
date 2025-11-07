@@ -799,6 +799,9 @@ Be critical. World-class teams don't accept mediocrity. If something is subpar, 
                 # Phase 1: Engineering Manager plans (with full team context)
                 await self._engineering_manager_cycle()
                 
+                # Phase 1.2: Task Master monitors workload and fills gaps
+                await self._task_master_cycle()
+                
                 # Phase 1.5: Process code reviews (Marcus reviews code)
                 await self._process_all_pending_reviews()
                 
