@@ -2020,12 +2020,16 @@
                 const response = await fetch(`/api/tasks/${taskId}`);
                 if (response.ok) {
                     const detailedTask = await response.json();
+                    console.log('📋 Task detail response:', detailedTask);
+                    console.log('🔗 GitHub repo:', detailedTask.github_repo);
+                    console.log('🔗 GitHub links:', detailedTask.github_links);
                     displayTaskDetail(detailedTask);
                 } else {
+                    console.warn('⚠️ Failed to fetch detailed task, using cached task');
                     displayTaskDetail(task);
                 }
             } catch (error) {
-                console.error('Error fetching task details:', error);
+                console.error('❌ Error fetching task details:', error);
                 displayTaskDetail(task);
             }
         }
@@ -2060,6 +2064,14 @@
             // Get GitHub repo from task data or use default
             let githubRepo = task.github_repo || 'https://github.com/mango-magic/mango-platform';
             let githubBranch = task.github_branch || 'main';
+            
+            console.log('🔍 Building proof of work section:', {
+                githubRepo,
+                githubBranch,
+                filesChanged: filesChanged.length,
+                inferredFiles: inferredFiles.length,
+                taskStatus: task.status
+            });
             
             // Try to infer files from task description if no files_changed
             let inferredFiles = [];
@@ -2096,6 +2108,13 @@
             
             // Build proof of work section - always show something for completed tasks
             let proofOfWorkSection = '';
+            console.log('📊 Proof of work check:', {
+                hasAnyFiles,
+                taskStatus: task.status,
+                githubRepo,
+                allFilesLength: allFiles.length
+            });
+            
             if (hasAnyFiles) {
                 proofOfWorkSection = `
                 <div style="margin: 24px 0;">
