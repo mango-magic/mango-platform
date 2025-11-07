@@ -666,6 +666,11 @@
             <span>Recent Activity</span>
         </div>
         
+        <div class="sidebar-item" onclick="showView('pow')">
+            <span class="sidebar-icon">📋</span>
+            <span>POW</span>
+        </div>
+        
         <div class="sidebar-item" onclick="showView('evaluations')">
             <span class="sidebar-icon">🔍</span>
             <span>Self-Evaluations</span>
@@ -975,6 +980,32 @@
             <p style="color: rgba(255,255,255,0.8); margin-bottom: 24px;">Latest updates from your AI team</p>
             
             <div id="activityFeed"></div>
+        </div>
+        
+        <!-- Proof of Work View -->
+        <div id="pow" class="view">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <div>
+                    <h1>📋 Proof of Work</h1>
+                    <p style="color: rgba(255,255,255,0.8); margin-top: 8px;">Digital evidence of completed work</p>
+                </div>
+                <div style="display: flex; gap: 12px;">
+                    <input type="text" id="powSearch" placeholder="Search proof of work..." style="padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: white; width: 300px;" onkeyup="filterPOW()">
+                    <select id="powFilter" onchange="filterPOW()" style="padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: white;">
+                        <option value="all">All Tasks</option>
+                        <option value="completed">Completed Only</option>
+                        <option value="with_files">With Files Changed</option>
+                        <option value="with_commits">With Commits</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div id="powList" style="display: grid; gap: 20px;">
+                <div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.8);">
+                    <div style="font-size: 48px; margin-bottom: 12px;">⏳</div>
+                    <div>Loading proof of work...</div>
+                </div>
+            </div>
         </div>
         
         <!-- Self-Evaluations View -->
