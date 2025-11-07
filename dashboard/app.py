@@ -153,6 +153,14 @@ async def get_analytics():
         "success_rate": []
     }
 
+@app.get("/api/activity/live")
+async def get_live_activity():
+    """Get current agent activity (what each agent is working on right now)"""
+    data = await fetch_from_orchestrator("/api/activity/live")
+    if data:
+        return data
+    return {"agents_working": []}
+
 @app.get("/api/activity")
 async def get_recent_activity(limit: int = 20):
     """Get recent activity feed"""

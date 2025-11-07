@@ -757,6 +757,26 @@
                 </div>
             </div>
             
+            <!-- Live Activity Feed - What agents are working on RIGHT NOW -->
+            <div class="card" style="margin-bottom: 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <div>
+                        <h2 style="margin: 0; color: white; display: flex; align-items: center; gap: 12px;">
+                            <span id="liveIndicator" style="display: inline-block; width: 12px; height: 12px; background: #10b981; border-radius: 50%; animation: pulse 2s infinite;"></span>
+                            Live Activity Feed
+                        </h2>
+                        <div style="font-size: 14px; opacity: 0.9; margin-top: 4px;">See what each agent is working on right now</div>
+                    </div>
+                    <div style="font-size: 12px; opacity: 0.8;" id="liveActivityCount">0 agents working</div>
+                </div>
+                <div id="liveActivityFeed" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; max-height: 400px; overflow-y: auto;">
+                    <div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.8);">
+                        <div style="font-size: 48px; margin-bottom: 12px;">⏳</div>
+                        <div>Connecting to live feed...</div>
+                    </div>
+                </div>
+            </div>
+            
             <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 32px;">
                 <div class="card">
                     <h2>Activity Overview (Last 30 Days)</h2>
@@ -2800,6 +2820,174 @@
             return map[status] || 'badge-blue';
         }
         
+        // Live Activity Feed via WebSocket
+        let ws = null;
+        let liveActivityData = {}; // agent_id -> activity data
+        
+        function connectWebSocket() {
+            // Get orchestrator URL from environment or use default
+            const orchestratorUrl = window.location.hostname === 'localhost' 
+                ? 'ws://localhost:10000' 
+                : 'wss://mango-platform.onrender.com';
+            
+            try {
+                ws = new WebSocket(`${orchestratorUrl}/ws/activity`);
+                
+                ws.onopen = () => {
+                    console.log('✅ WebSocket connected');
+                    document.getElementById('liveIndicator').style.background = '#10b981';
+                    // Send ping to keep connection alive
+                    setInterval(() => {
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send('ping');
+                        }
+                    }, 30000);
+                };
+                
+                ws.onmessage = (event) => {
+                    const message = JSON.parse(event.data);
+                    handleWebSocketMessage(message);
+                };
+                
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    document.getElementById('liveIndicator').style.background = '#ef4444';
+                };
+                
+                ws.onclose = () => {
+                    console.log('WebSocket disconnected, reconnecting...');
+                    document.getElementById('liveIndicator').style.background = '#f59e0b';
+                    setTimeout(connectWebSocket, 5000); // Reconnect after 5 seconds
+                };
+            } catch (error) {
+                console.error('Failed to connect WebSocket:', error);
+                // Fallback to polling
+                setInterval(loadLiveActivityPolling, 5000);
+            }
+        }
+        
+        function handleWebSocketMessage(message) {
+            if (message.type === 'initial_state') {
+                liveActivityData = {};
+                message.data.agents_working.forEach(activity => {
+                    liveActivityData[activity.agent_id] = activity;
+                });
+                updateLiveActivityFeed();
+            } else if (message.type === 'task_started') {
+                liveActivityData[message.agent_id] = {
+                    agent_id: message.agent_id,
+                    agent_name: message.agent_name,
+                    agent_emoji: message.agent_emoji,
+                    agent_role: message.agent_role,
+                    task_id: message.task_id,
+                    task_title: message.task_title,
+                    status: message.status,
+                    timestamp: message.timestamp
+                };
+                updateLiveActivityFeed();
+                showToast(`${message.agent_emoji} ${message.agent_name} started: ${message.task_title}`, 'info');
+            } else if (message.type === 'task_completed') {
+                delete liveActivityData[message.agent_id];
+                updateLiveActivityFeed();
+                showToast(`✅ ${message.agent_emoji} ${message.agent_name} completed: ${message.task_title}`, 'success');
+            } else if (message.type === 'task_in_review') {
+                if (liveActivityData[message.agent_id]) {
+                    liveActivityData[message.agent_id].status = 'in_review';
+                    liveActivityData[message.agent_id].reviewer = message.reviewer;
+                }
+                updateLiveActivityFeed();
+            } else if (message.type === 'task_blocked') {
+                if (liveActivityData[message.agent_id]) {
+                    liveActivityData[message.agent_id].status = 'blocked';
+                    liveActivityData[message.agent_id].reason = message.reason;
+                }
+                updateLiveActivityFeed();
+                showToast(`⚠️ ${message.agent_emoji} ${message.agent_name} blocked: ${message.task_title}`, 'warning');
+            }
+        }
+        
+        function updateLiveActivityFeed() {
+            const feed = document.getElementById('liveActivityFeed');
+            const countEl = document.getElementById('liveActivityCount');
+            const activities = Object.values(liveActivityData);
+            
+            countEl.textContent = `${activities.length} agent${activities.length !== 1 ? 's' : ''} working`;
+            
+            if (activities.length === 0) {
+                feed.innerHTML = `
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: rgba(255,255,255,0.8);">
+                        <div style="font-size: 48px; margin-bottom: 12px;">😴</div>
+                        <div>No agents currently working. They'll appear here when they start tasks!</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            feed.innerHTML = activities.map(activity => {
+                const timeAgo = getTimeAgo(activity.timestamp);
+                const statusColor = {
+                    'in_progress': '#3b82f6',
+                    'pending': '#f59e0b',
+                    'in_review': '#8b5cf6',
+                    'blocked': '#ef4444'
+                }[activity.status] || '#6b7280';
+                
+                return `
+                    <div style="background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); border-radius: 12px; padding: 16px; border: 1px solid rgba(255,255,255,0.2); animation: slideIn 0.3s ease-out;">
+                        <div style="display: flex; align-items: start; gap: 12px;">
+                            <div style="font-size: 32px;">${activity.agent_emoji}</div>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; font-size: 16px; margin-bottom: 4px;">${activity.agent_name}</div>
+                                <div style="font-size: 12px; opacity: 0.8; margin-bottom: 8px;">${activity.agent_role}</div>
+                                <div style="font-size: 14px; margin-bottom: 8px; line-height: 1.4;">
+                                    ${activity.task_title}
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
+                                    <span style="display: inline-block; width: 8px; height: 8px; background: ${statusColor}; border-radius: 50%;"></span>
+                                    <span style="font-size: 12px; opacity: 0.9;">${activity.status.replace('_', ' ')}</span>
+                                    <span style="font-size: 12px; opacity: 0.7; margin-left: auto;">${timeAgo}</span>
+                                </div>
+                                ${activity.task_id ? `
+                                    <button onclick="showTaskDetail('${activity.task_id}')" style="margin-top: 8px; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; width: 100%;">
+                                        View Task →
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function getTimeAgo(timestamp) {
+            const now = new Date();
+            const then = new Date(timestamp);
+            const seconds = Math.floor((now - then) / 1000);
+            
+            if (seconds < 60) return `${seconds}s ago`;
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return `${minutes}m ago`;
+            const hours = Math.floor(minutes / 60);
+            if (hours < 24) return `${hours}h ago`;
+            const days = Math.floor(hours / 24);
+            return `${days}d ago`;
+        }
+        
+        // Fallback polling if WebSocket fails
+        async function loadLiveActivityPolling() {
+            try {
+                const response = await fetch('/api/activity/live');
+                const data = await response.json();
+                liveActivityData = {};
+                data.agents_working.forEach(activity => {
+                    liveActivityData[activity.agent_id] = activity;
+                });
+                updateLiveActivityFeed();
+            } catch (error) {
+                console.error('Error loading live activity:', error);
+            }
+        }
+        
         // Initialize dashboard chart
         async function initDashboardChart() {
             try {
@@ -2859,6 +3047,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadDashboardStats();
             initDashboardChart();
+            connectWebSocket(); // Connect to live activity feed
             setInterval(autoRefresh, 30000); // Refresh every 30 seconds
         });
     </script>

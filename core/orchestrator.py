@@ -412,6 +412,9 @@ class Orchestrator:
         self.start_time = datetime.now()
         self.last_self_eval = datetime.now()  # Track last self-evaluation
         
+        # WebSocket manager reference (will be set by main())
+        self.ws_manager = None
+        
         # Self-improvement system
         from core.self_improvement import SelfImprovementCycle
         self.self_improvement = SelfImprovementCycle(
@@ -439,6 +442,19 @@ class Orchestrator:
         self._load_state()
         
         logger.info("🥭 Orchestrator initialized with 39 agents")
+    
+    def _broadcast_activity_update(self, message: dict):
+        """Broadcast activity update to WebSocket clients"""
+        if self.ws_manager:
+            try:
+                import asyncio
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(self.ws_manager.broadcast(message))
+                else:
+                    loop.run_until_complete(self.ws_manager.broadcast(message))
+            except Exception as e:
+                logger.debug(f"Could not broadcast activity: {e}")
         
     def _load_agents(self):
         """Load all agent configurations"""
@@ -1056,6 +1072,19 @@ Generate 15-25 strategic tasks NOW:"""
         task['started_at'] = datetime.now().isoformat()
         self.task_manager._save_task(task_id)
         
+        # Broadcast activity update via WebSocket
+        self._broadcast_activity_update({
+            "type": "task_started",
+            "agent_id": agent_id,
+            "agent_name": agent.name,
+            "agent_emoji": agent.emoji,
+            "agent_role": agent.role,
+            "task_id": task_id,
+            "task_title": task.get('title', 'Unknown'),
+            "status": "in_progress",
+            "timestamp": datetime.now().isoformat()
+        })
+        
         # Check for messages/blockers before starting
         messages = await self.team_comm.get_messages_for_agent(agent_id, unread_only=True)
         if messages:
@@ -1204,6 +1233,20 @@ Execute now:"""
                 logger.warning(f"⚠️ {agent.name} cannot complete '{task['title']}' - missing proof of work")
                 logger.warning(f"   Result was: {result_text[:200]}...")
                 
+                # Broadcast blocker
+                self._broadcast_activity_update({
+                    "type": "task_blocked",
+                    "agent_id": agent_id,
+                    "agent_name": agent.name,
+                    "agent_emoji": agent.emoji,
+                    "agent_role": agent.role,
+                    "task_id": task_id,
+                    "task_title": task.get('title', 'Unknown'),
+                    "status": "blocked",
+                    "reason": "Missing proof of work",
+                    "timestamp": datetime.now().isoformat()
+                })
+                
                 # Send message to agent asking for proof
                 from core.team_communication import Message
                 await self.team_comm.send_message(
@@ -1272,11 +1315,37 @@ Please resubmit with proof of work.
                 
                 logger.info(f"🔍 {agent.name} requested code review from {reviewer} for: {task['title']}")
                 
+                # Broadcast review request
+                self._broadcast_activity_update({
+                    "type": "task_in_review",
+                    "agent_id": agent_id,
+                    "agent_name": agent.name,
+                    "agent_emoji": agent.emoji,
+                    "agent_role": agent.role,
+                    "task_id": task_id,
+                    "task_title": task.get('title', 'Unknown'),
+                    "status": "in_review",
+                    "reviewer": reviewer,
+                    "timestamp": datetime.now().isoformat()
+                })
+                
                 # Review will be processed in next cycle's review phase
             else:
                 # No code review needed, mark complete (proof already validated)
                 if self.task_manager.complete_task(task_id, result_text):
                     logger.info(f"✅ {agent.name} completed: {task['title']} (with proof of work)")
+                    # Broadcast completion
+                    self._broadcast_activity_update({
+                        "type": "task_completed",
+                        "agent_id": agent_id,
+                        "agent_name": agent.name,
+                        "agent_emoji": agent.emoji,
+                        "agent_role": agent.role,
+                        "task_id": task_id,
+                        "task_title": task.get('title', 'Unknown'),
+                        "status": "completed",
+                        "timestamp": datetime.now().isoformat()
+                    })
                 else:
                     logger.error(f"❌ Failed to complete {task_id} - validation failed")
             
@@ -1583,12 +1652,99 @@ async def main():
     # Start HTTP health check server in background for Render port requirement
     import threading
     import uvicorn
-    from fastapi import FastAPI
+    from fastapi import FastAPI, WebSocket, WebSocketDisconnect
     
     app = FastAPI()
     
     # Store orchestrator reference for API endpoints
     orchestrator_ref = {"instance": None}
+    ws_manager_ref = {"instance": None}  # Store WebSocket manager reference
+    
+    # WebSocket connection manager for live activity feed
+    class ConnectionManager:
+        def __init__(self):
+            self.active_connections: List[WebSocket] = []
+        
+        async def connect(self, websocket: WebSocket):
+            await websocket.accept()
+            self.active_connections.append(websocket)
+            logger.info(f"📡 WebSocket connected. Total connections: {len(self.active_connections)}")
+        
+        def disconnect(self, websocket: WebSocket):
+            if websocket in self.active_connections:
+                self.active_connections.remove(websocket)
+            logger.info(f"📡 WebSocket disconnected. Total connections: {len(self.active_connections)}")
+        
+        async def broadcast(self, message: dict):
+            """Broadcast message to all connected clients"""
+            if not self.active_connections:
+                return
+            disconnected = []
+            for connection in self.active_connections:
+                try:
+                    await connection.send_json(message)
+                except Exception as e:
+                    logger.warning(f"Failed to send to WebSocket: {e}")
+                    disconnected.append(connection)
+            
+            # Remove disconnected clients
+            for conn in disconnected:
+                self.disconnect(conn)
+    
+    manager = ConnectionManager()
+    ws_manager_ref["instance"] = manager  # Store for orchestrator to use
+    
+    @app.websocket("/ws/activity")
+    async def websocket_activity(websocket: WebSocket):
+        """WebSocket endpoint for live activity feed"""
+        await manager.connect(websocket)
+        try:
+            # Send initial state
+            if orchestrator_ref["instance"]:
+                orch = orchestrator_ref["instance"]
+                # Get current agent activity
+                agent_activity = []
+                for agent_id, agent in orch.agents.items():
+                    if agent_id == 'eng_manager_001':
+                        continue
+                    agent_tasks = [t for t in orch.task_manager.tasks.values() 
+                                  if t.get('assigned_to') == agent_id]
+                    current_task = next((t for t in agent_tasks 
+                                       if t.get('status') in ['in_progress', 'pending']), None)
+                    if current_task:
+                        agent_activity.append({
+                            "agent_id": agent_id,
+                            "agent_name": agent.name,
+                            "agent_emoji": agent.emoji,
+                            "agent_role": agent.role,
+                            "task_id": current_task.get('id'),
+                            "task_title": current_task.get('title', 'Unknown'),
+                            "status": current_task.get('status', 'pending'),
+                            "started_at": current_task.get('started_at') or current_task.get('created_at'),
+                            "timestamp": datetime.now().isoformat()
+                        })
+                
+                await websocket.send_json({
+                    "type": "initial_state",
+                    "data": {
+                        "agents_working": agent_activity,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                })
+            
+            # Keep connection alive
+            while True:
+                try:
+                    # Wait for ping or close
+                    data = await websocket.receive_text()
+                    if data == "ping":
+                        await websocket.send_json({"type": "pong"})
+                except WebSocketDisconnect:
+                    break
+        except Exception as e:
+            logger.error(f"WebSocket error: {e}")
+        finally:
+            manager.disconnect(websocket)
     
     @app.get("/")
     @app.get("/health")
@@ -1962,11 +2118,38 @@ async def main():
             }
         }
     
+    @app.get("/api/activity/live")
+    async def get_live_activity():
+        """Get current agent activity (what each agent is working on right now)"""
+        if not orchestrator_ref["instance"]:
+            return {"agents_working": []}
+        
+        orch = orchestrator_ref["instance"]
+        agent_activity = []
+        for agent_id, agent in orch.agents.items():
+            if agent_id == 'eng_manager_001':
+                continue
+            agent_tasks = [t for t in orch.task_manager.tasks.values() 
+                          if t.get('assigned_to') == agent_id]
+            current_task = next((t for t in agent_tasks 
+                               if t.get('status') in ['in_progress', 'pending']), None)
+            if current_task:
+                agent_activity.append({
+                    "agent_id": agent_id,
+                    "agent_name": agent.name,
+                    "agent_emoji": agent.emoji,
+                    "agent_role": agent.role,
+                    "task_id": current_task.get('id'),
+                    "task_title": current_task.get('title', 'Unknown'),
+                    "status": current_task.get('status', 'pending'),
+                    "started_at": current_task.get('started_at') or current_task.get('created_at'),
+                    "timestamp": datetime.now().isoformat()
+                })
+        
+        return {"agents_working": agent_activity, "timestamp": datetime.now().isoformat()}
+    
     @app.get("/api/activity")
     async def get_activity(limit: int = 20):
-        """Get recent activity"""
-        if not orchestrator_ref["instance"]:
-            return []
         
         tasks = list(orchestrator_ref["instance"].task_manager.tasks.values())
         tasks = sorted(tasks, key=lambda x: x.get('created_at', ''), reverse=True)[:limit]
@@ -2095,6 +2278,7 @@ async def main():
     # Run orchestrator in main thread
     orchestrator = Orchestrator()
     orchestrator_ref["instance"] = orchestrator  # Store reference for API endpoints
+    orchestrator.ws_manager = manager  # Set WebSocket manager reference
     await orchestrator.run_forever()
 
 if __name__ == "__main__":
