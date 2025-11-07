@@ -187,12 +187,169 @@
             color: #1e40af;
         }
         
+        .badge-purple {
+            background: #e9d5ff;
+            color: #6b21a8;
+        }
+        
         .view {
             display: none;
         }
         
         .view.active {
             display: block;
+        }
+        
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+        
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            position: relative;
+            width: 90%;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        
+        .modal-close {
+            background: #f3f4f6;
+            border: none;
+            border-radius: 8px;
+            width: 32px;
+            height: 32px;
+            cursor: pointer;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        
+        .modal-close:hover {
+            background: #e5e7eb;
+        }
+        
+        .clickable {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .clickable:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .expandable {
+            cursor: pointer;
+        }
+        
+        .expandable-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        
+        .expandable-content.expanded {
+            max-height: 1000px;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin: 16px 0;
+        }
+        
+        .info-item {
+            padding: 12px;
+            background: #f9fafb;
+            border-radius: 8px;
+            border-left: 3px solid #667eea;
+        }
+        
+        .info-label {
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 4px;
+        }
+        
+        .info-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        
+        .timeline {
+            position: relative;
+            padding-left: 24px;
+            margin: 16px 0;
+        }
+        
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #e5e7eb;
+        }
+        
+        .timeline-item {
+            position: relative;
+            padding-bottom: 16px;
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -20px;
+            top: 4px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #667eea;
+            border: 2px solid white;
+        }
+        
+        .timeline-time {
+            font-size: 12px;
+            color: #9ca3af;
+            margin-bottom: 4px;
+        }
+        
+        .timeline-content {
+            font-size: 14px;
+            color: #374151;
         }
         
         h1 {
@@ -282,31 +439,35 @@
             <p style="color: rgba(255,255,255,0.8); margin-bottom: 24px;">Real-time insights into your autonomous AI team</p>
             
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 32px;">
-                <div class="stat-card">
+                <div class="stat-card clickable" onclick="showStatDetail('cycles')">
                     <div class="stat-label">Development Cycles</div>
                     <div class="stat-value" id="cycleCount">0</div>
                     <div class="stat-subtitle">Continuous autonomous loops</div>
+                    <div style="margin-top: 8px; font-size: 12px; color: #667eea; cursor: pointer;">Click for details →</div>
                 </div>
                 
-                <div class="stat-card">
+                <div class="stat-card clickable" onclick="showStatDetail('tasks')">
                     <div class="stat-label">Tasks Completed</div>
                     <div class="stat-value" id="completedTasks">0</div>
                     <div class="stat-subtitle" id="taskSubtitle">Out of 0 total</div>
                     <div class="progress-bar">
                         <div class="progress-fill" id="taskProgress"></div>
                     </div>
+                    <div style="margin-top: 8px; font-size: 12px; color: #667eea; cursor: pointer;">Click for breakdown →</div>
                 </div>
                 
-                <div class="stat-card">
+                <div class="stat-card clickable" onclick="showView('agents')">
                     <div class="stat-label">Active Agents</div>
                     <div class="stat-value" id="activeAgents">39</div>
                     <div class="stat-subtitle">15 developers + 24 Mangoes</div>
+                    <div style="margin-top: 8px; font-size: 12px; color: #667eea; cursor: pointer;">Click to view all →</div>
                 </div>
                 
-                <div class="stat-card">
+                <div class="stat-card clickable" onclick="showStatDetail('uptime')">
                     <div class="stat-label">Uptime</div>
                     <div class="stat-value" id="uptime">0.0</div>
                     <div class="stat-subtitle">Days elapsed</div>
+                    <div style="margin-top: 8px; font-size: 12px; color: #667eea; cursor: pointer;">Click for details →</div>
                 </div>
             </div>
             
@@ -478,6 +639,17 @@
         </div>
     </div>
     
+    <!-- Modal for detailed views -->
+    <div id="detailModal" class="modal" onclick="if(event.target.id === 'detailModal') closeModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2 id="modalTitle">Details</h2>
+                <button class="modal-close" onclick="closeModal()">×</button>
+            </div>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+    
     <script>
         // Global state
         let currentView = 'dashboard';
@@ -607,6 +779,25 @@
                 document.getElementById('agentInProgressTasks').textContent = stats.in_progress || 0;
                 document.getElementById('agentPendingTasks').textContent = stats.pending || 0;
                 
+                // Add system prompt preview if available
+                if (agentData.system_prompt) {
+                    const agentContent = document.getElementById('agentDetailContent');
+                    const existingPrompt = document.getElementById('agentSystemPrompt');
+                    if (existingPrompt) existingPrompt.remove();
+                    
+                    const promptDiv = document.createElement('div');
+                    promptDiv.id = 'agentSystemPrompt';
+                    promptDiv.className = 'card';
+                    promptDiv.style.marginBottom = '24px';
+                    promptDiv.innerHTML = `
+                        <h2 style="margin-bottom: 12px;">System Prompt</h2>
+                        <div style="background: #f9fafb; padding: 16px; border-radius: 8px; max-height: 200px; overflow-y: auto; font-size: 13px; color: #374151; line-height: 1.6;">
+                            ${agentData.system_prompt.substring(0, 500)}${agentData.system_prompt.length > 500 ? '...' : ''}
+                        </div>
+                    `;
+                    agentContent.insertBefore(promptDiv, agentContent.querySelector('.card:last-child'));
+                }
+                
                 // Show tasks
                 const tasks = agentData.tasks || [];
                 const tasksList = document.getElementById('agentTasksList');
@@ -615,15 +806,21 @@
                     tasksList.innerHTML = '<p style="color: #6b7280;">No tasks yet. Tasks will appear here as they are assigned.</p>';
                 } else {
                     tasksList.innerHTML = tasks.map(task => `
-                        <div class="task-card" style="margin-bottom: 12px;">
+                        <div class="task-card clickable" style="margin-bottom: 12px;" onclick="showTaskDetail('${task.id}')">
                             <div style="display: flex; justify-content: space-between; align-items: start;">
                                 <div style="flex: 1;">
                                     <div style="font-weight: 600; color: #1f2937; margin-bottom: 4px;">${task.title || 'Untitled Task'}</div>
-                                    <div style="font-size: 14px; color: #6b7280; margin-bottom: 8px;">${task.description || 'No description'}</div>
-                                    ${task.created_at ? `<div style="font-size: 12px; color: #9ca3af;">Created: ${new Date(task.created_at).toLocaleString()}</div>` : ''}
-                                    ${task.completed_at ? `<div style="font-size: 12px; color: #10b981;">Completed: ${new Date(task.completed_at).toLocaleString()}</div>` : ''}
+                                    <div style="font-size: 14px; color: #6b7280; margin-bottom: 8px;">${task.description ? (task.description.length > 80 ? task.description.substring(0, 80) + '...' : task.description) : 'No description'}</div>
+                                    <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: #9ca3af;">
+                                        ${task.created_at ? `<span>📅 ${new Date(task.created_at).toLocaleString()}</span>` : ''}
+                                        ${task.completed_at ? `<span style="color: #10b981;">✅ ${new Date(task.completed_at).toLocaleString()}</span>` : ''}
+                                        ${task.priority ? `<span>⚡ Priority ${task.priority}</span>` : ''}
+                                    </div>
                                 </div>
-                                <span class="badge ${getStatusBadgeClass(task.status)}">${task.status || 'pending'}</span>
+                                <div style="display: flex; flex-direction: column; align-items: end; gap: 8px;">
+                                    <span class="badge ${getStatusBadgeClass(task.status)}">${task.status || 'pending'}</span>
+                                    <div style="font-size: 11px; color: #667eea;">Click for details →</div>
+                                </div>
                             </div>
                         </div>
                     `).join('');
@@ -680,15 +877,24 @@
                     `;
                 } else {
                     list.innerHTML = tasks.map(task => `
-                        <div class="task-card">
+                        <div class="task-card clickable" onclick="showTaskDetail('${task.id}')">
                             <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
                                 <div style="flex: 1;">
                                     <div style="font-weight: 600; color: #1f2937; margin-bottom: 4px;">${task.title || 'Untitled Task'}</div>
-                                    <div style="font-size: 14px; color: #6b7280; margin-bottom: 8px;">${task.description || 'No description'}</div>
-                                    <div style="font-size: 13px; color: #9ca3af;">Assigned to: ${task.assigned_to || 'Unassigned'}</div>
-                                    ${task.created_at ? `<div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">Created: ${new Date(task.created_at).toLocaleString()}</div>` : ''}
+                                    <div style="font-size: 14px; color: #6b7280; margin-bottom: 8px;">${task.description ? (task.description.length > 100 ? task.description.substring(0, 100) + '...' : task.description) : 'No description'}</div>
+                                    <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px;">
+                                        <div style="font-size: 13px; color: #9ca3af;">
+                                            👤 <span style="color: #667eea; cursor: pointer;" onclick="event.stopPropagation(); showAgentDetail('${task.assigned_to || ''}')">${task.assigned_to || 'Unassigned'}</span>
+                                        </div>
+                                        ${task.priority ? `<div style="font-size: 13px; color: #9ca3af;">⚡ Priority: ${task.priority}</div>` : ''}
+                                        ${task.estimated_hours ? `<div style="font-size: 13px; color: #9ca3af;">⏱️ Est: ${task.estimated_hours}h</div>` : ''}
+                                        ${task.created_at ? `<div style="font-size: 12px; color: #9ca3af;">📅 ${new Date(task.created_at).toLocaleString()}</div>` : ''}
+                                    </div>
                                 </div>
-                                <span class="badge ${getStatusBadgeClass(task.status)}">${task.status || 'pending'}</span>
+                                <div style="display: flex; flex-direction: column; align-items: end; gap: 8px;">
+                                    <span class="badge ${getStatusBadgeClass(task.status)}">${task.status || 'pending'}</span>
+                                    <div style="font-size: 11px; color: #9ca3af;">Click for details →</div>
+                                </div>
                             </div>
                         </div>
                     `).join('');
@@ -767,12 +973,36 @@
                             data: data.tasks_completed,
                             borderColor: '#667eea',
                             backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                            tension: 0.4
+                            tension: 0.4,
+                            pointRadius: 4,
+                            pointHoverRadius: 6
                         }]
                     },
                     options: {
                         responsive: true,
-                        plugins: { legend: { display: false } }
+                        plugins: { 
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    title: function(context) {
+                                        return 'Date: ' + context[0].label;
+                                    },
+                                    label: function(context) {
+                                        return 'Tasks: ' + context.parsed.y;
+                                    }
+                                }
+                            }
+                        },
+                        onClick: (event, elements) => {
+                            if (elements.length > 0) {
+                                const index = elements[0].index;
+                                showView('tasks');
+                            }
+                        },
+                        interaction: {
+                            intersect: false,
+                            mode: 'index'
+                        }
                     }
                 });
                 
@@ -788,12 +1018,35 @@
                             data: data.agent_activity,
                             borderColor: '#764ba2',
                             backgroundColor: 'rgba(118, 75, 162, 0.1)',
-                            tension: 0.4
+                            tension: 0.4,
+                            pointRadius: 4,
+                            pointHoverRadius: 6
                         }]
                     },
                     options: {
                         responsive: true,
-                        plugins: { legend: { display: false } }
+                        plugins: { 
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    title: function(context) {
+                                        return 'Date: ' + context[0].label;
+                                    },
+                                    label: function(context) {
+                                        return 'Active Agents: ' + context.parsed.y;
+                                    }
+                                }
+                            }
+                        },
+                        onClick: (event, elements) => {
+                            if (elements.length > 0) {
+                                showView('agents');
+                            }
+                        },
+                        interaction: {
+                            intersect: false,
+                            mode: 'index'
+                        }
                     }
                 });
             } catch (error) {
@@ -808,15 +1061,21 @@
                 const activities = await response.json();
                 
                 const feed = document.getElementById('activityFeed');
-                feed.innerHTML = activities.map(activity => `
-                    <div class="card">
+                feed.innerHTML = activities.length === 0 ? 
+                    '<div class="card"><p style="color: #6b7280;">No recent activity. Activity will appear here as agents work.</p></div>' :
+                    activities.map(activity => `
+                    <div class="card clickable" onclick="showActivityDetail('${activity.id || ''}')">
                         <div style="display: flex; align-items: start; gap: 16px;">
                             <span style="font-size: 32px;">📝</span>
                             <div style="flex: 1;">
-                                <div style="font-weight: 600; color: #1f2937; margin-bottom: 4px;">${activity.title}</div>
+                                <div style="font-weight: 600; color: #1f2937; margin-bottom: 4px; cursor: pointer;">${activity.title}</div>
                                 <div style="font-size: 14px; color: #6b7280; margin-bottom: 8px;">${activity.message}</div>
-                                <div style="font-size: 12px; color: #9ca3af;">
-                                    ${activity.agent} • ${new Date(activity.timestamp).toLocaleString()}
+                                <div style="display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: #9ca3af;">
+                                    <span style="color: #667eea; cursor: pointer;" onclick="event.stopPropagation(); showAgentDetail('${activity.agent || ''}')">👤 ${activity.agent || 'Unknown'}</span>
+                                    <span>•</span>
+                                    <span>🕐 ${new Date(activity.timestamp).toLocaleString()}</span>
+                                    <span>•</span>
+                                    <span style="color: #667eea;">Click for details →</span>
                                 </div>
                             </div>
                             <span class="badge ${getStatusBadgeClass(activity.status)}">${activity.status}</span>
@@ -914,6 +1173,292 @@
             }
         }
         
+        // Modal functions
+        function closeModal() {
+            document.getElementById('detailModal').classList.remove('active');
+        }
+        
+        function openModal(title, content) {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalBody').innerHTML = content;
+            document.getElementById('detailModal').classList.add('active');
+        }
+        
+        // Show task detail
+        async function showTaskDetail(taskId) {
+            const task = allTasks.find(t => t.id === taskId);
+            if (!task) {
+                // Try to fetch from API
+                try {
+                    const response = await fetch(`/api/tasks`);
+                    const tasks = await response.json();
+                    const foundTask = tasks.find(t => t.id === taskId);
+                    if (foundTask) {
+                        displayTaskDetail(foundTask);
+                    } else {
+                        alert('Task not found');
+                    }
+                } catch (error) {
+                    alert('Error loading task details');
+                }
+                return;
+            }
+            displayTaskDetail(task);
+        }
+        
+        function displayTaskDetail(task) {
+            const timeline = [];
+            if (task.created_at) timeline.push({time: task.created_at, event: 'Task created'});
+            if (task.started_at) timeline.push({time: task.started_at, event: 'Task started'});
+            if (task.completed_at) timeline.push({time: task.completed_at, event: 'Task completed'});
+            
+            const content = `
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">Status</div>
+                        <div class="info-value"><span class="badge ${getStatusBadgeClass(task.status)}">${task.status || 'pending'}</span></div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Assigned To</div>
+                        <div class="info-value" style="color: #667eea; cursor: pointer;" onclick="closeModal(); showAgentDetail('${task.assigned_to || ''}')">${task.assigned_to || 'Unassigned'}</div>
+                    </div>
+                    ${task.priority ? `
+                    <div class="info-item">
+                        <div class="info-label">Priority</div>
+                        <div class="info-value">${task.priority}</div>
+                    </div>
+                    ` : ''}
+                    ${task.estimated_hours ? `
+                    <div class="info-item">
+                        <div class="info-label">Estimated Hours</div>
+                        <div class="info-value">${task.estimated_hours}h</div>
+                    </div>
+                    ` : ''}
+                </div>
+                
+                <div style="margin: 24px 0;">
+                    <h3 style="margin-bottom: 12px;">Description</h3>
+                    <div style="background: #f9fafb; padding: 16px; border-radius: 8px; color: #374151;">
+                        ${task.description || 'No description provided'}
+                    </div>
+                </div>
+                
+                ${task.result ? `
+                <div style="margin: 24px 0;">
+                    <h3 style="margin-bottom: 12px;">Result</h3>
+                    <div style="background: #f0fdf4; padding: 16px; border-radius: 8px; border-left: 4px solid #10b981; color: #374151;">
+                        ${task.result}
+                    </div>
+                </div>
+                ` : ''}
+                
+                ${task.dependencies && task.dependencies.length > 0 ? `
+                <div style="margin: 24px 0;">
+                    <h3 style="margin-bottom: 12px;">Dependencies</h3>
+                    <div style="background: #f9fafb; padding: 16px; border-radius: 8px;">
+                        ${task.dependencies.map(depId => {
+                            const depTask = allTasks.find(t => t.id === depId);
+                            return depTask ? `<div style="margin: 4px 0; color: #667eea; cursor: pointer;" onclick="closeModal(); showTaskDetail('${depId}')">→ ${depTask.title}</div>` : `<div style="margin: 4px 0;">→ ${depId}</div>`;
+                        }).join('')}
+                    </div>
+                </div>
+                ` : ''}
+                
+                ${timeline.length > 0 ? `
+                <div style="margin: 24px 0;">
+                    <h3 style="margin-bottom: 12px;">Timeline</h3>
+                    <div class="timeline">
+                        ${timeline.map(item => `
+                            <div class="timeline-item">
+                                <div class="timeline-time">${new Date(item.time).toLocaleString()}</div>
+                                <div class="timeline-content">${item.event}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                ` : ''}
+                
+                <div class="info-grid" style="margin-top: 24px;">
+                    ${task.created_at ? `
+                    <div class="info-item">
+                        <div class="info-label">Created</div>
+                        <div class="info-value" style="font-size: 14px;">${new Date(task.created_at).toLocaleString()}</div>
+                    </div>
+                    ` : ''}
+                    ${task.started_at ? `
+                    <div class="info-item">
+                        <div class="info-label">Started</div>
+                        <div class="info-value" style="font-size: 14px;">${new Date(task.started_at).toLocaleString()}</div>
+                    </div>
+                    ` : ''}
+                    ${task.completed_at ? `
+                    <div class="info-item">
+                        <div class="info-label">Completed</div>
+                        <div class="info-value" style="font-size: 14px;">${new Date(task.completed_at).toLocaleString()}</div>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+            
+            openModal(`Task: ${task.title || 'Untitled'}`, content);
+        }
+        
+        // Show stat detail
+        async function showStatDetail(type) {
+            const stats = await fetch('/api/dashboard/stats').then(r => r.json());
+            
+            let title, content;
+            
+            if (type === 'tasks') {
+                title = 'Task Breakdown';
+                content = `
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Total Tasks</div>
+                            <div class="info-value">${stats.total_tasks || 0}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Completed</div>
+                            <div class="info-value" style="color: #10b981;">${stats.completed_tasks || 0}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">In Progress</div>
+                            <div class="info-value" style="color: #3b82f6;">${stats.in_progress_tasks || 0}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Pending</div>
+                            <div class="info-value" style="color: #f59e0b;">${stats.pending_tasks || 0}</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 24px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>Completion Rate</span>
+                            <span style="font-weight: 600;">${(stats.completion_rate || 0).toFixed(1)}%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${stats.completion_rate || 0}%"></div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 24px;">
+                        <button class="btn-primary" onclick="closeModal(); showView('tasks')">View All Tasks →</button>
+                    </div>
+                `;
+            } else if (type === 'cycles') {
+                title = 'Development Cycles';
+                content = `
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Total Cycles</div>
+                            <div class="info-value">${stats.cycle_count || 0}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Uptime</div>
+                            <div class="info-value">${stats.uptime_days || 0} days</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Status</div>
+                            <div class="info-value"><span class="badge badge-green">${stats.status || 'running'}</span></div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 24px; background: #f9fafb; padding: 16px; border-radius: 8px;">
+                        <p style="color: #374151; line-height: 1.6;">
+                            Each cycle includes:<br>
+                            • Status reports from all agents<br>
+                            • Task planning by Marcus (Engineering Manager)<br>
+                            • Code reviews for pending changes<br>
+                            • Task execution by assigned agents<br>
+                            • Blocker resolution<br>
+                            • Self-evaluation (hourly)
+                        </p>
+                    </div>
+                `;
+            } else if (type === 'uptime') {
+                title = 'System Uptime';
+                const hours = (stats.uptime_days || 0) * 24 + (stats.uptime_hours || 0);
+                content = `
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Days</div>
+                            <div class="info-value">${stats.uptime_days || 0}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Hours</div>
+                            <div class="info-value">${stats.uptime_hours || 0}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Total Hours</div>
+                            <div class="info-value">${hours}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Status</div>
+                            <div class="info-value"><span class="badge badge-green">${stats.status || 'running'}</span></div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 24px; background: #f9fafb; padding: 16px; border-radius: 8px;">
+                        <p style="color: #374151;">
+                            The orchestrator has been running autonomously since startup, continuously managing tasks, coordinating agents, and improving the system.
+                        </p>
+                    </div>
+                `;
+            }
+            
+            openModal(title, content);
+        }
+        
+        // Show activity detail
+        async function showActivityDetail(activityId) {
+            const activities = await fetch('/api/activity').then(r => r.json());
+            const activity = activities.find(a => a.id === activityId);
+            
+            if (!activity) {
+                alert('Activity not found');
+                return;
+            }
+            
+            const content = `
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">Type</div>
+                        <div class="info-value">${activity.type || 'task'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Agent</div>
+                        <div class="info-value" style="color: #667eea; cursor: pointer;" onclick="closeModal(); showAgentDetail('${activity.agent || ''}')">${activity.agent || 'Unknown'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Status</div>
+                        <div class="info-value"><span class="badge ${getStatusBadgeClass(activity.status)}">${activity.status}</span></div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Timestamp</div>
+                        <div class="info-value" style="font-size: 14px;">${new Date(activity.timestamp).toLocaleString()}</div>
+                    </div>
+                </div>
+                
+                <div style="margin: 24px 0;">
+                    <h3 style="margin-bottom: 12px;">Title</h3>
+                    <div style="background: #f9fafb; padding: 16px; border-radius: 8px; color: #374151; font-weight: 600;">
+                        ${activity.title}
+                    </div>
+                </div>
+                
+                <div style="margin: 24px 0;">
+                    <h3 style="margin-bottom: 12px;">Details</h3>
+                    <div style="background: #f9fafb; padding: 16px; border-radius: 8px; color: #374151;">
+                        ${activity.message || 'No additional details'}
+                    </div>
+                </div>
+                
+                ${activity.id ? `
+                <div style="margin-top: 24px;">
+                    <button class="btn-primary" onclick="closeModal(); showTaskDetail('${activity.id}')">View Related Task →</button>
+                </div>
+                ` : ''}
+            `;
+            
+            openModal(`Activity: ${activity.title}`, content);
+        }
+        
         // Helper functions
         function getStatusBadgeClass(status) {
             const map = {
@@ -922,7 +1467,9 @@
                 'pending': 'badge-yellow',
                 'failed': 'badge-red',
                 'approved': 'badge-green',
-                'rejected': 'badge-red'
+                'rejected': 'badge-red',
+                'blocked': 'badge-red',
+                'in_review': 'badge-purple'
             };
             return map[status] || 'badge-blue';
         }
