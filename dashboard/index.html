@@ -2065,14 +2065,6 @@
             let githubRepo = task.github_repo || 'https://github.com/mango-magic/mango-platform';
             let githubBranch = task.github_branch || 'main';
             
-            console.log('🔍 Building proof of work section:', {
-                githubRepo,
-                githubBranch,
-                filesChanged: filesChanged.length,
-                inferredFiles: inferredFiles.length,
-                taskStatus: task.status
-            });
-            
             // Try to infer files from task description if no files_changed
             let inferredFiles = [];
             if (filesChanged.length === 0 && task.description) {
@@ -2101,6 +2093,14 @@
                     inferredFiles.push('config/agent_definitions.py');
                 }
             }
+            
+            console.log('🔍 Building proof of work section:', {
+                githubRepo,
+                githubBranch,
+                filesChanged: filesChanged.length,
+                inferredFiles: inferredFiles.length,
+                taskStatus: task.status
+            });
             
             // If still no files, show at least a link to search GitHub or view recent commits
             const allFiles = filesChanged.length > 0 ? filesChanged : inferredFiles;
