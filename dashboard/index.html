@@ -581,8 +581,15 @@
         
         <!-- Pending Approval View -->
         <div id="pending" class="view">
-            <h1>Tasks Pending Your Approval</h1>
-            <p style="color: rgba(255,255,255,0.8); margin-bottom: 24px;">Review and approve work from your AI team</p>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <div>
+                    <h1 style="margin: 0;">Tasks Pending Your Approval</h1>
+                    <p style="color: rgba(255,255,255,0.8); margin-top: 8px;">Review and approve work from your AI team</p>
+                </div>
+                <button class="btn-primary" id="approveAllBtn" onclick="approveAllTasks()" style="font-size: 16px; padding: 12px 24px;">
+                    ✅ Approve All
+                </button>
+            </div>
             
             <div id="pendingList"></div>
         </div>
@@ -1047,6 +1054,103 @@
                 alert('Failed to reject task: ' + error.message);
                 setTimeout(() => {
                     button.disabled = false;
+                    button.textContent = originalText;
+                    button.style.background = '';
+                }, 2000);
+            }
+        }
+        
+        // Approve all pending tasks
+        async function approveAllTasks() {
+            const button = document.getElementById('approveAllBtn');
+            const originalText = button.textContent;
+            
+            try {
+                // Get all pending tasks
+                const [reviewResponse, pendingResponse] = await Promise.all([
+                    fetch('/api/tasks?status=in_review'),
+                    fetch('/api/tasks?status=pending')
+                ]);
+                
+                const reviewTasks = await reviewResponse.json();
+                const pendingTasks = await pendingResponse.json();
+                const allTasks = [...reviewTasks, ...pendingTasks];
+                
+                if (allTasks.length === 0) {
+                    alert('No tasks to approve');
+                    return;
+                }
+                
+                // Confirm action
+                const confirmed = confirm(`Are you sure you want to approve all ${allTasks.length} pending task(s)?`);
+                if (!confirmed) {
+                    return;
+                }
+                
+                // Disable button and show progress
+                button.disabled = true;
+                button.textContent = `⏳ Approving ${allTasks.length} tasks...`;
+                
+                let successCount = 0;
+                let failCount = 0;
+                const errors = [];
+                
+                // Approve each task
+                for (const task of allTasks) {
+                    try {
+                        const response = await fetch(`/api/tasks/${task.id}/approve`, { method: 'POST' });
+                        
+                        if (!response.ok) {
+                            const error = await response.json();
+                            throw new Error(error.detail || 'Failed to approve task');
+                        }
+                        
+                        successCount++;
+                        button.textContent = `⏳ Approving ${successCount}/${allTasks.length}...`;
+                        
+                        // Small delay to avoid overwhelming the server
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                    } catch (error) {
+                        failCount++;
+                        errors.push(`${task.title || task.id}: ${error.message}`);
+                        console.error(`Failed to approve task ${task.id}:`, error);
+                    }
+                }
+                
+                // Show results
+                if (failCount === 0) {
+                    button.textContent = `✅ All ${successCount} tasks approved!`;
+                    button.style.background = '#10b981';
+                } else {
+                    button.textContent = `⚠️ ${successCount} approved, ${failCount} failed`;
+                    button.style.background = '#f59e0b';
+                    if (errors.length > 0) {
+                        console.error('Approval errors:', errors);
+                        alert(`Approved ${successCount} tasks. ${failCount} failed:\n\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? '\n...' : ''}`);
+                    }
+                }
+                
+                // Reload data
+                setTimeout(() => {
+                    loadPendingTasks();
+                    loadDashboardStats();
+                    loadTasks();
+                    
+                    // Reset button
+                    setTimeout(() => {
+                        button.disabled = false;
+                        button.textContent = originalText;
+                        button.style.background = '';
+                    }, 2000);
+                }, 1000);
+                
+            } catch (error) {
+                console.error('Error approving all tasks:', error);
+                button.disabled = false;
+                button.textContent = '❌ Error';
+                button.style.background = '#ef4444';
+                alert('Failed to approve tasks: ' + error.message);
+                setTimeout(() => {
                     button.textContent = originalText;
                     button.style.background = '';
                 }, 2000);
