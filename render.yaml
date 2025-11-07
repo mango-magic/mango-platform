@@ -20,10 +20,12 @@ services:
   - type: web
     name: mango-dashboard
     env: python
-    buildCommand: pip install fastapi uvicorn
-    startCommand: python deploy/monitor_dashboard.py
+    buildCommand: pip install fastapi uvicorn httpx
+    startCommand: python dashboard/app.py
     plan: free
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: ORCHESTRATOR_URL
+        value: https://mango-platform.onrender.com
 

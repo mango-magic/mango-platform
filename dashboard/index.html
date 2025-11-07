@@ -338,6 +338,57 @@
             </div>
         </div>
         
+        <!-- Agent Detail View -->
+        <div id="agentDetail" class="view">
+            <div style="display: flex; align-items: center; margin-bottom: 24px;">
+                <button class="btn-secondary" onclick="showView('agents')" style="margin-right: 16px;">← Back to Agents</button>
+                <h1 id="agentDetailName" style="margin: 0;">Agent Details</h1>
+            </div>
+            
+            <div id="agentDetailContent">
+                <div class="card" style="margin-bottom: 24px;">
+                    <div style="display: flex; align-items: center; gap: 24px;">
+                        <span id="agentDetailEmoji" style="font-size: 64px;"></span>
+                        <div style="flex: 1;">
+                            <h2 id="agentDetailTitle" style="margin: 0 0 8px 0;"></h2>
+                            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                                <span class="badge badge-green" id="agentDetailStatus"></span>
+                                <span class="badge badge-blue" id="agentDetailType"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 24px;">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Tasks</div>
+                        <div class="stat-value" id="agentTotalTasks">0</div>
+                        <div class="stat-subtitle">All time</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Completed</div>
+                        <div class="stat-value" id="agentCompletedTasks">0</div>
+                        <div class="stat-subtitle" id="agentCompletionRate">0%</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">In Progress</div>
+                        <div class="stat-value" id="agentInProgressTasks">0</div>
+                        <div class="stat-subtitle">Currently working</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Pending</div>
+                        <div class="stat-value" id="agentPendingTasks">0</div>
+                        <div class="stat-subtitle">Queued up</div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h2>Tasks</h2>
+                    <div id="agentTasksList">Loading tasks...</div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Agents View -->
         <div id="agents" class="view">
             <h1>AI Agents</h1>
@@ -440,7 +491,22 @@
             document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
             
             document.getElementById(viewName).classList.add('active');
-            event.target.closest('.sidebar-item').classList.add('active');
+            
+            // Only update sidebar if not showing agent detail (which doesn't have a sidebar item)
+            if (viewName !== 'agentDetail') {
+                const sidebarItem = event?.target?.closest('.sidebar-item');
+                if (sidebarItem) {
+                    sidebarItem.classList.add('active');
+                } else {
+                    // Find sidebar item by view name
+                    const items = document.querySelectorAll('.sidebar-item');
+                    items.forEach(item => {
+                        if (item.getAttribute('onclick')?.includes(viewName)) {
+                            item.classList.add('active');
+                        }
+                    });
+                }
+            }
             
             currentView = viewName;
             
@@ -491,7 +557,7 @@
                 
                 const grid = document.getElementById('agentsGrid');
                 grid.innerHTML = agents.map(agent => `
-                    <div class="agent-card">
+                    <div class="agent-card" onclick="showAgentDetail('${agent.id}')" style="cursor: pointer;">
                         <div style="display: flex; align-items: center; margin-bottom: 8px;">
                             <span style="font-size: 24px; margin-right: 12px;">${agent.emoji}</span>
                             <div style="flex: 1;">
@@ -512,29 +578,125 @@
             loadAgents(type);
         }
         
+        // Show agent detail view
+        async function showAgentDetail(agentId) {
+            try {
+                console.log('Loading agent details for:', agentId);
+                const response = await fetch(`/api/agents/${agentId}`);
+                
+                if (!response.ok) {
+                    console.error('Failed to fetch agent details:', response.status);
+                    return;
+                }
+                
+                const agentData = await response.json();
+                console.log('Agent data:', agentData);
+                
+                // Update UI
+                document.getElementById('agentDetailName').textContent = agentData.name;
+                document.getElementById('agentDetailEmoji').textContent = agentData.emoji || '🤖';
+                document.getElementById('agentDetailTitle').textContent = agentData.role || 'Agent';
+                document.getElementById('agentDetailStatus').textContent = `🟢 ${agentData.status || 'active'}`;
+                document.getElementById('agentDetailType').textContent = agentData.type || 'developer';
+                
+                // Update stats
+                const stats = agentData.stats || {};
+                document.getElementById('agentTotalTasks').textContent = stats.total_tasks || 0;
+                document.getElementById('agentCompletedTasks').textContent = stats.completed || 0;
+                document.getElementById('agentCompletionRate').textContent = `${(stats.completion_rate || 0).toFixed(1)}%`;
+                document.getElementById('agentInProgressTasks').textContent = stats.in_progress || 0;
+                document.getElementById('agentPendingTasks').textContent = stats.pending || 0;
+                
+                // Show tasks
+                const tasks = agentData.tasks || [];
+                const tasksList = document.getElementById('agentTasksList');
+                
+                if (tasks.length === 0) {
+                    tasksList.innerHTML = '<p style="color: #6b7280;">No tasks yet. Tasks will appear here as they are assigned.</p>';
+                } else {
+                    tasksList.innerHTML = tasks.map(task => `
+                        <div class="task-card" style="margin-bottom: 12px;">
+                            <div style="display: flex; justify-content: space-between; align-items: start;">
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; color: #1f2937; margin-bottom: 4px;">${task.title || 'Untitled Task'}</div>
+                                    <div style="font-size: 14px; color: #6b7280; margin-bottom: 8px;">${task.description || 'No description'}</div>
+                                    ${task.created_at ? `<div style="font-size: 12px; color: #9ca3af;">Created: ${new Date(task.created_at).toLocaleString()}</div>` : ''}
+                                    ${task.completed_at ? `<div style="font-size: 12px; color: #10b981;">Completed: ${new Date(task.completed_at).toLocaleString()}</div>` : ''}
+                                </div>
+                                <span class="badge ${getStatusBadgeClass(task.status)}">${task.status || 'pending'}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+                
+                // Show the detail view
+                showView('agentDetail');
+            } catch (error) {
+                console.error('Error loading agent details:', error);
+                alert('Failed to load agent details: ' + error.message);
+            }
+        }
+        
         // Load tasks
         async function loadTasks(status = 'all') {
             try {
                 const url = status === 'all' ? '/api/tasks' : `/api/tasks?status=${status}`;
+                console.log('Loading tasks from:', url);
                 const response = await fetch(url);
+                
+                if (!response.ok) {
+                    console.error('Failed to fetch tasks:', response.status, response.statusText);
+                    document.getElementById('tasksList').innerHTML = 
+                        `<div class="card"><p style="color: #ef4444;">Error loading tasks: ${response.status}</p></div>`;
+                    return;
+                }
+                
                 const tasks = await response.json();
+                console.log('Received tasks:', tasks);
                 allTasks = tasks;
                 
                 const list = document.getElementById('tasksList');
-                list.innerHTML = tasks.length === 0 ? '<div class="card">No tasks found</div>' : tasks.map(task => `
-                    <div class="task-card">
-                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
-                            <div style="flex: 1;">
-                                <div style="font-weight: 600; color: #1f2937; margin-bottom: 4px;">${task.title || 'Untitled Task'}</div>
-                                <div style="font-size: 14px; color: #6b7280; margin-bottom: 8px;">${task.description || 'No description'}</div>
-                                <div style="font-size: 13px; color: #9ca3af;">Assigned to: ${task.assigned_to || 'Unassigned'}</div>
+                if (!tasks || tasks.length === 0) {
+                    list.innerHTML = `
+                        <div class="card">
+                            <div style="text-align: center; padding: 40px;">
+                                <div style="font-size: 48px; margin-bottom: 16px;">📋</div>
+                                <h3 style="color: #1f2937; margin-bottom: 8px;">No tasks found</h3>
+                                <p style="color: #6b7280; margin-bottom: 16px;">
+                                    Tasks will appear here as Marcus (Engineering Manager) creates them.<br>
+                                    The orchestrator creates initial tasks on startup and generates new tasks every cycle.
+                                </p>
+                                <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; text-align: left; max-width: 500px; margin: 0 auto;">
+                                    <p style="color: #374151; font-size: 14px; margin: 0;">
+                                        <strong>Expected behavior:</strong><br>
+                                        • Initial tasks are created when the orchestrator starts<br>
+                                        • Marcus generates 15-25 new tasks every cycle (~2 minutes)<br>
+                                        • Tasks are assigned to agents and executed automatically<br>
+                                        • Check back in a few minutes if tasks haven't appeared yet
+                                    </p>
+                                </div>
                             </div>
-                            <span class="badge ${getStatusBadgeClass(task.status)}">${task.status || 'pending'}</span>
                         </div>
-                    </div>
-                `).join('');
+                    `;
+                } else {
+                    list.innerHTML = tasks.map(task => `
+                        <div class="task-card">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; color: #1f2937; margin-bottom: 4px;">${task.title || 'Untitled Task'}</div>
+                                    <div style="font-size: 14px; color: #6b7280; margin-bottom: 8px;">${task.description || 'No description'}</div>
+                                    <div style="font-size: 13px; color: #9ca3af;">Assigned to: ${task.assigned_to || 'Unassigned'}</div>
+                                    ${task.created_at ? `<div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">Created: ${new Date(task.created_at).toLocaleString()}</div>` : ''}
+                                </div>
+                                <span class="badge ${getStatusBadgeClass(task.status)}">${task.status || 'pending'}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                }
             } catch (error) {
                 console.error('Error loading tasks:', error);
+                document.getElementById('tasksList').innerHTML = 
+                    `<div class="card"><p style="color: #ef4444;">Error: ${error.message}</p></div>`;
             }
         }
         

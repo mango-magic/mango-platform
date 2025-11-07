@@ -261,6 +261,27 @@ class TaskManager:
         self.task_dir = data_dir / "tasks"
         self.task_dir.mkdir(parents=True, exist_ok=True)
         
+        # Load existing tasks from disk
+        self._load_tasks_from_disk()
+    
+    def _load_tasks_from_disk(self):
+        """Load all tasks from disk"""
+        if not self.task_dir.exists():
+            return
+        
+        for task_file in self.task_dir.glob("*.json"):
+            try:
+                with open(task_file) as f:
+                    task = json.load(f)
+                    task_id = task_file.stem
+                    task['id'] = task_id
+                    self.tasks[task_id] = task
+            except Exception as e:
+                logger.warning(f"Failed to load task {task_file}: {e}")
+        
+        if self.tasks:
+            logger.info(f"📋 Loaded {len(self.tasks)} tasks from disk")
+        
     def create_task(self, task_data: dict) -> str:
         """Create new task"""
         task_id = f"TASK-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{len(self.tasks)}"
@@ -680,11 +701,20 @@ Be critical. World-class teams don't accept mediocrity. If something is subpar, 
                 logger.info(f"⏱️  Uptime: {(cycle_start - self.start_time).total_seconds()/3600:.1f}h")
                 logger.info(f"{'='*80}\n")
                 
-                # Phase 1: Engineering Manager plans
+                # Phase 0: Collect status reports from team (standup)
+                await self._collect_status_reports()
+                
+                # Phase 1: Engineering Manager plans (with full team context)
                 await self._engineering_manager_cycle()
+                
+                # Phase 1.5: Process code reviews (Marcus reviews code)
+                await self._process_all_pending_reviews()
                 
                 # Phase 2: Execute all pending tasks in parallel
                 await self._execute_all_tasks()
+                
+                # Phase 2.5: Process blockers and unblock agents
+                await self._process_blockers()
                 
                 # Phase 3: Self-evaluation (every hour)
                 time_since_eval = (datetime.now() - self.last_self_eval).total_seconds() / 3600
@@ -727,52 +757,127 @@ Be critical. World-class teams don't accept mediocrity. If something is subpar, 
         """Engineering Manager creates tasks for the team"""
         manager = self.agents['eng_manager_001']
         
-        # Gather metrics
+        # Gather comprehensive metrics
         total_tasks = len(self.task_manager.tasks)
         completed = len([t for t in self.task_manager.tasks.values() 
                         if t['status'] == 'completed'])
         pending = len([t for t in self.task_manager.tasks.values() 
                       if t['status'] == 'pending'])
+        in_progress = len([t for t in self.task_manager.tasks.values() 
+                          if t['status'] == 'in_progress'])
+        in_review = len([t for t in self.task_manager.tasks.values() 
+                        if t['status'] == 'in_review'])
+        blocked = len([t for t in self.task_manager.tasks.values() 
+                      if t['status'] == 'blocked'])
+        
+        # Get recent completed tasks for context
+        recent_completed = sorted(
+            [t for t in self.task_manager.tasks.values() if t.get('status') == 'completed'],
+            key=lambda x: x.get('completed_at', ''),
+            reverse=True
+        )[:10]
+        
+        # Get what each agent is currently working on
+        agent_workload = {}
+        for agent_id in self.agents.keys():
+            if agent_id == 'eng_manager_001':
+                continue
+            agent_tasks = [t for t in self.task_manager.tasks.values() 
+                          if t.get('assigned_to') == agent_id]
+            agent_workload[agent_id] = {
+                'total': len(agent_tasks),
+                'completed': len([t for t in agent_tasks if t.get('status') == 'completed']),
+                'pending': len([t for t in agent_tasks if t.get('status') == 'pending']),
+                'in_progress': len([t for t in agent_tasks if t.get('status') == 'in_progress']),
+                'current_task': next((t for t in agent_tasks if t.get('status') in ['pending', 'in_progress']), None)
+            }
+        
+        # Get team status summary
+        team_status = await self.team_comm.get_team_status_summary()
+        
+        # Get pending reviews
+        pending_reviews = await self.team_comm.get_pending_reviews_for_agent('eng_manager_001')
+        
+        # Get blockers
+        blockers = [t for t in self.task_manager.tasks.values() if t.get('status') == 'blocked']
         
         days_elapsed = (datetime.now() - self.start_time).days
+        hours_elapsed = (datetime.now() - self.start_time).total_seconds() / 3600
         
-        # Build context
+        # Calculate velocity (tasks per hour)
+        velocity = completed / hours_elapsed if hours_elapsed > 0 else 0
+        
+        # Build comprehensive context
         prompt = f"""CYCLE #{self.cycle_count} - Engineering Manager Planning
 
-CURRENT STATE:
+⏰ TIME & PROGRESS:
 - Days into project: {days_elapsed}/30
-- Total tasks created: {total_tasks}
-- Completed tasks: {completed}
-- Pending tasks: {pending}
-- Completion rate: {(completed/total_tasks*100 if total_tasks > 0 else 0):.1f}%
+- Hours elapsed: {hours_elapsed:.1f}h
+- Velocity: {velocity:.2f} tasks/hour
+- Target: 24 Mangoes in 30 days = ~0.8 Mangoes/day
 
-ROADMAP STATUS:
+📊 CURRENT STATE:
+- Total tasks: {total_tasks}
+- ✅ Completed: {completed} ({(completed/total_tasks*100 if total_tasks > 0 else 0):.1f}%)
+- ⏳ Pending: {pending}
+- 🔄 In Progress: {in_progress}
+- 🔍 In Review: {in_review}
+- ⚠️ Blocked: {blocked}
+- 📝 Pending Reviews: {len(pending_reviews)}
+
+🎯 RECENT COMPLETIONS (Last 10):
+{chr(10).join([f"- {t.get('title', 'Unknown')} by {t.get('assigned_to', 'Unknown')}" for t in recent_completed[:10]])}
+
+👥 TEAM WORKLOAD:
+{chr(10).join([f"- {agent_id}: {data['completed']} done, {data['pending']} pending, {data['in_progress']} in progress" + (f" | Current: {data['current_task']['title'][:50]}" if data['current_task'] else "") for agent_id, data in list(agent_workload.items())[:15]])}
+
+⚠️ BLOCKERS ({len(blockers)}):
+{chr(10).join([f"- {t.get('title', 'Unknown')}: {', '.join(t.get('blockers', []))}" for t in blockers[:5]])}
+
+📋 TEAM STATUS SUMMARY:
+- Agents reporting: {team_status.get('agents_reporting', 0)}
+- Total tasks completed today: {team_status.get('total_tasks_completed', 0)}
+- Average velocity: {team_status.get('avg_velocity', 0):.1f} tasks/day
+
+🎯 ROADMAP STATUS:
 Days 1-10: Core Infrastructure + Mango Data, EA, Sales, Support
 Days 11-20: 10 more Mangoes (Marketing, Design, Content, etc)
 Days 21-30: Final 10 Mangoes + Polish + Launch
 
-YOUR JOB RIGHT NOW:
-1. Assess what's been completed
-2. Identify blockers
-3. Generate 10-20 high-priority tasks
-4. Assign to appropriate team members
-5. Ensure we're on track for 24 Mangoes in 30 days
+YOUR JOB RIGHT NOW (CRITICAL FOR PROGRESS):
+1. ✅ Review and process pending code reviews FIRST (unblock the team)
+2. 🔍 Identify agents who are idle or have low workload - assign them work
+3. 🎯 Generate 15-25 HIGH-IMPACT tasks that move us toward Mango completion
+4. 🔗 Create task dependencies so agents can build on each other's work
+5. 👥 Assign tasks strategically - balance workload across all 15 developers
+6. 🚀 Prioritize tasks that unblock others or complete Mango features
+7. 📊 Ensure every agent has 2-3 tasks queued up (no idle time!)
+
+COLLABORATION STRATEGY:
+- Create tasks that build on recently completed work
+- Pair agents on complex features (e.g., "Aria + Kai: Build API together")
+- Create integration tasks that connect different components
+- Ensure frontend/backend work is coordinated
+- Make sure QA has work to test as features complete
 
 OUTPUT FORMAT (JSON only):
 {{
   "tasks": [
     {{
-      "title": "Build X feature",
-      "description": "Detailed description with acceptance criteria",
+      "title": "Build X feature (builds on Y completed by Z)",
+      "description": "Detailed description with acceptance criteria. Reference related completed tasks.",
       "assigned_to": "backend_001",
       "priority": 1,
       "estimated_hours": 4,
-      "dependencies": []
+      "dependencies": ["TASK-ID-of-prerequisite"],
+      "collaborates_with": ["backend_002"],
+      "builds_on": "What this builds on from recent completions"
     }}
-  ]
+  ],
+  "strategy": "Brief explanation of task generation strategy"
 }}
 
-Generate tasks NOW:"""
+Generate 15-25 strategic tasks NOW:"""
 
         try:
             response = await self.gemini.generate(
@@ -870,14 +975,74 @@ Generate tasks NOW:"""
         
         logger.info(f"▶️  {agent.name} starting: {task['title']}")
         
+        # Mark task as in progress
+        task['status'] = 'in_progress'
+        task['started_at'] = datetime.now().isoformat()
+        self.task_manager._save_task(task_id)
+        
+        # Check for messages/blockers before starting
+        messages = await self.team_comm.get_messages_for_agent(agent_id, unread_only=True)
+        if messages:
+            logger.info(f"💬 {agent.name} has {len(messages)} unread messages")
+        
         try:
-            # Build execution prompt
+            # Build execution prompt with comprehensive team context
+            team_context = ""
+            
+            # Recent messages
+            if messages:
+                recent_msgs = messages[:5]
+                team_context += "\n\n💬 RECENT TEAM MESSAGES:\n"
+                for msg in recent_msgs:
+                    team_context += f"- {msg.from_agent}: {msg.subject}\n"
+            
+            # What other agents are working on
+            other_agents_work = []
+            for other_agent_id, other_agent in self.agents.items():
+                if other_agent_id == agent_id:
+                    continue
+                other_tasks = [t for t in self.task_manager.tasks.values() 
+                              if t.get('assigned_to') == other_agent_id and 
+                              t.get('status') in ['in_progress', 'in_review']]
+                if other_tasks:
+                    for task in other_tasks[:2]:
+                        other_agents_work.append(f"{other_agent.name} ({other_agent.role}): {task.get('title', 'Unknown')}")
+            
+            if other_agents_work:
+                team_context += "\n\n👥 WHAT YOUR TEAMMATES ARE WORKING ON:\n"
+                team_context += "\n".join(other_agents_work[:10])
+            
+            # Recently completed work you can build on
+            recent_completed = sorted(
+                [t for t in self.task_manager.tasks.values() if t.get('status') == 'completed'],
+                key=lambda x: x.get('completed_at', ''),
+                reverse=True
+            )[:5]
+            
+            if recent_completed:
+                team_context += "\n\n✅ RECENTLY COMPLETED (you can build on these):\n"
+                for task in recent_completed:
+                    team_context += f"- {task.get('title', 'Unknown')} by {task.get('assigned_to', 'Unknown')}\n"
+            
+            # Task dependencies
+            task_deps = []
+            if task.get('dependencies'):
+                for dep_id in task.get('dependencies', []):
+                    dep_task = self.task_manager.tasks.get(dep_id)
+                    if dep_task:
+                        task_deps.append(f"- {dep_task.get('title', 'Unknown')} ({dep_task.get('status', 'unknown')})")
+            
+            if task_deps:
+                team_context += "\n\n🔗 TASK DEPENDENCIES:\n"
+                team_context += "\n".join(task_deps)
+            
             prompt = f"""TASK EXECUTION
 
 TASK ID: {task_id}
 TITLE: {task['title']}
 DESCRIPTION: {task['description']}
 PRIORITY: {task['priority']}
+{team_context}
 
 YOUR AVAILABLE TOOLS:
 {', '.join(agent.tools)}
@@ -885,16 +1050,27 @@ YOUR AVAILABLE TOOLS:
 EXECUTE THIS TASK:
 1. Plan your approach
 2. Use your tools to complete the work
-3. Test your work
-4. Report results
+3. Write tests (aim for 90%+ coverage)
+4. If you're blocked, ask for help using team communication
+5. Report results
+
+IMPORTANT - CODE REVIEW PROCESS:
+- If this task involves code changes, you MUST request a code review
+- Request review from Marcus (eng_manager_001) or appropriate senior engineer
+- Do NOT mark task as complete until code is reviewed and approved
+- Follow world-class engineering practices: "We fight the code together, not each other"
 
 OUTPUT FORMAT:
 {{
   "actions_taken": ["action 1", "action 2", ...],
   "files_changed": ["file1.py", "file2.tsx", ...],
+  "test_coverage": 0.95,
   "result": "description of what was accomplished",
-  "status": "completed" or "blocked",
-  "next_steps": ["what should happen next"]
+  "status": "completed" or "blocked" or "needs_review",
+  "needs_code_review": true/false,
+  "reviewer": "eng_manager_001",
+  "next_steps": ["what should happen next"],
+  "blockers": ["any blockers encountered"]
 }}
 
 Execute now:"""
@@ -913,16 +1089,329 @@ Execute now:"""
             if agent.browser_enabled and result_data:
                 await self._execute_agent_actions(agent, result_data)
             
-            # Mark complete
-            result_text = json.dumps(result_data) if result_data else response
-            self.task_manager.complete_task(task_id, result_text)
+            # Handle blockers
+            if result_data and result_data.get('status') == 'blocked':
+                blockers = result_data.get('blockers', [])
+                for blocker in blockers:
+                    await self.team_comm.report_blocker(
+                        agent_id, 
+                        f"Task {task['title']}: {blocker}"
+                    )
+                task['status'] = 'blocked'
+                task['blockers'] = blockers
+                self.task_manager._save_task(task_id)
+                logger.warning(f"⚠️  {agent.name} blocked on: {task['title']}")
+                return
             
-            logger.info(f"✅ {agent.name} completed: {task['title']}")
+            # Handle code review requirement
+            needs_review = result_data and (
+                result_data.get('needs_code_review', False) or 
+                result_data.get('files_changed', [])
+            )
+            
+            if needs_review:
+                # Request code review from Marcus or specified reviewer
+                reviewer = result_data.get('reviewer', 'eng_manager_001')
+                files_changed = result_data.get('files_changed', [])
+                test_coverage = result_data.get('test_coverage', 0.0)
+                
+                review_id = f"REVIEW-{task_id}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+                
+                from core.team_communication import CodeReviewRequest
+                review_request = CodeReviewRequest(
+                    id=review_id,
+                    from_agent=agent_id,
+                    to_agent=reviewer,
+                    pr_url=f"task://{task_id}",
+                    files_changed=files_changed,
+                    description=f"{task['title']}: {result_data.get('result', '')[:200]}",
+                    test_coverage=test_coverage * 100,
+                    timestamp=datetime.now().isoformat(),
+                    priority="high" if task.get('priority', 2) == 1 else "normal",
+                    status="pending"
+                )
+                
+                await self.team_comm.request_code_review(review_request)
+                task['status'] = 'in_review'
+                task['review_id'] = review_id
+                task['reviewer'] = reviewer
+                self.task_manager._save_task(task_id)
+                
+                logger.info(f"🔍 {agent.name} requested code review from {reviewer} for: {task['title']}")
+                
+                # Review will be processed in next cycle's review phase
+            else:
+                # No code review needed, mark complete
+                result_text = json.dumps(result_data) if result_data else response
+                self.task_manager.complete_task(task_id, result_text)
+                logger.info(f"✅ {agent.name} completed: {task['title']}")
             
         except Exception as e:
             logger.error(f"❌ {agent.name} failed on {task['title']}: {e}")
             task['status'] = 'failed'
             task['error'] = str(e)
+            self.task_manager._save_task(task_id)
+            
+            # Report error to team
+            await self.team_comm.report_blocker(
+                agent_id,
+                f"Task '{task['title']}' failed: {str(e)}"
+            )
+    
+    async def _collect_status_reports(self):
+        """Collect status reports from all agents (daily standup)"""
+        # Only collect every few cycles to avoid spam
+        if self.cycle_count % 5 != 0:  # Every 5 cycles (~10 minutes)
+            return
+        
+        logger.info("📊 Collecting status reports from team...")
+        
+        from core.team_communication import StatusReport
+        
+        for agent_id, agent in self.agents.items():
+            if agent_id == 'eng_manager_001':
+                continue
+            
+            # Get agent's tasks
+            agent_tasks = [t for t in self.task_manager.tasks.values() 
+                          if t.get('assigned_to') == agent_id]
+            
+            completed_today = [t for t in agent_tasks 
+                             if t.get('status') == 'completed' and 
+                             t.get('completed_at', '').startswith(datetime.now().strftime('%Y-%m-%d'))]
+            
+            current_task = next((t for t in agent_tasks 
+                               if t.get('status') in ['pending', 'in_progress']), None)
+            
+            blockers = [t for t in agent_tasks if t.get('status') == 'blocked']
+            
+            # Calculate velocity
+            total_completed = len([t for t in agent_tasks if t.get('status') == 'completed'])
+            uptime_hours = (datetime.now() - self.start_time).total_seconds() / 3600
+            velocity = total_completed / uptime_hours if uptime_hours > 0 else 0
+            
+            report = StatusReport(
+                agent_id=agent_id,
+                agent_name=agent.name,
+                timestamp=datetime.now().isoformat(),
+                completed_today=[t.get('title', 'Unknown') for t in completed_today],
+                working_on=current_task.get('title', 'No current task') if current_task else 'Idle',
+                blockers=[t.get('title', 'Unknown') for t in blockers],
+                needs_help_from=[],
+                code_reviews_done=0,  # Could track this
+                tests_written=len([t for t in completed_today if 'test' in t.get('title', '').lower()]),
+                bugs_fixed=len([t for t in completed_today if 'fix' in t.get('title', '').lower()]),
+                velocity_score=velocity
+            )
+            
+            await self.team_comm.submit_status_report(report)
+        
+        logger.info("✅ Status reports collected")
+    
+    async def _process_blockers(self):
+        """Process blockers and help unblock agents"""
+        blockers = [t for t in self.task_manager.tasks.values() if t.get('status') == 'blocked']
+        
+        if not blockers:
+            return
+        
+        logger.info(f"🔧 Processing {len(blockers)} blockers...")
+        
+        manager = self.agents['eng_manager_001']
+        
+        for blocker_task in blockers[:3]:  # Process up to 3 blockers per cycle
+            agent_id = blocker_task.get('assigned_to')
+            blocker_reasons = blocker_task.get('blockers', [])
+            
+            if not blocker_reasons:
+                continue
+            
+            # Ask Marcus to help unblock
+            prompt = f"""BLOCKER RESOLUTION
+
+AGENT: {agent_id}
+TASK: {blocker_task.get('title', 'Unknown')}
+BLOCKERS: {', '.join(blocker_reasons)}
+
+YOUR JOB:
+1. Analyze why this agent is blocked
+2. Provide specific guidance to unblock them
+3. Suggest alternative approaches
+4. Assign helper tasks if needed
+
+OUTPUT FORMAT:
+{{
+  "analysis": "Why they're blocked",
+  "solution": "How to unblock them",
+  "action_items": ["specific action 1", "specific action 2"],
+  "helper_tasks": [
+    {{
+      "title": "Helper task title",
+      "assigned_to": "agent_id",
+      "description": "How this helps unblock"
+    }}
+  ]
+}}
+
+Help unblock NOW:"""
+            
+            try:
+                response = await self.gemini.generate(
+                    agent_id=manager.id,
+                    system=manager.system_prompt,
+                    prompt=prompt,
+                    temp=manager.temperature
+                )
+                
+                solution_data = self._extract_json(response)
+                
+                if solution_data:
+                    # Send unblocking message to agent
+                    from core.team_communication import Message
+                    await self.team_comm.send_message(
+                        Message(
+                            id=f"unblock_{blocker_task['id']}_{datetime.now().timestamp()}",
+                            from_agent='eng_manager_001',
+                            to_agent=agent_id,
+                            message_type="help_request",
+                            subject=f"Unblocking: {blocker_task.get('title', 'Unknown')}",
+                            content=f"""**Analysis:** {solution_data.get('analysis', '')}
+
+**Solution:** {solution_data.get('solution', '')}
+
+**Action Items:**
+{chr(10).join(['- ' + item for item in solution_data.get('action_items', [])])}""",
+                            timestamp=datetime.now().isoformat(),
+                            priority="high"
+                        )
+                    )
+                    
+                    # Create helper tasks if needed
+                    if solution_data.get('helper_tasks'):
+                        for helper_task in solution_data['helper_tasks']:
+                            helper_task['priority'] = 1  # High priority for unblocking
+                            helper_task['dependencies'] = []
+                            self.task_manager.create_task(helper_task)
+                            logger.info(f"📋 Created helper task: {helper_task.get('title', 'Unknown')}")
+                    
+                    logger.info(f"✅ Unblocked: {blocker_task.get('title', 'Unknown')}")
+            except Exception as e:
+                logger.error(f"❌ Failed to process blocker: {e}")
+    
+    async def _process_all_pending_reviews(self):
+        """Process all pending code reviews - Marcus reviews everything"""
+        # Marcus reviews all pending reviews
+        marcus_id = 'eng_manager_001'
+        pending_reviews = await self.team_comm.get_pending_reviews_for_agent(marcus_id)
+        
+        if pending_reviews:
+            logger.info(f"🔍 Processing {len(pending_reviews)} pending code reviews")
+            # Process up to 3 reviews per cycle to avoid overload
+            for review in pending_reviews[:3]:
+                await self._process_pending_reviews(marcus_id)
+                # Small delay between reviews
+                await asyncio.sleep(2)
+    
+    async def _process_pending_reviews(self, reviewer_id: str):
+        """Process pending code reviews for a reviewer"""
+        if reviewer_id not in self.agents:
+            return
+        
+        pending_reviews = await self.team_comm.get_pending_reviews_for_agent(reviewer_id)
+        
+        if not pending_reviews:
+            return
+        
+        reviewer = self.agents[reviewer_id]
+        
+        # Process one review per cycle to avoid overload
+        review = pending_reviews[0]
+        logger.info(f"🔍 {reviewer.name} reviewing: {review.description}")
+        
+        # Get the task being reviewed
+        task_id = review.id.split('-')[1] if '-' in review.id else None
+        task = None
+        if task_id:
+            task = self.task_manager.tasks.get(task_id)
+        
+        # Build review prompt
+        prompt = f"""CODE REVIEW REQUEST
+
+REVIEW ID: {review.id}
+FROM: {review.from_agent}
+DESCRIPTION: {review.description}
+FILES CHANGED: {len(review.files_changed)}
+TEST COVERAGE: {review.test_coverage}%
+
+REVIEW GUIDELINES (from "Defining our Characters.md"):
+- "We fight the code together, not each other"
+- Check for: security issues, test coverage, documentation, performance
+- Be specific: "I think there's a simpler version of this. Want to explore?"
+- Judge ideas on merit, not origin
+- Provide constructive feedback
+
+TASK CONTEXT:
+{json.dumps(task, indent=2) if task else 'No task context available'}
+
+REVIEW THIS CODE:
+1. Check test coverage (should be ≥90%)
+2. Review for security issues
+3. Check code quality and maintainability
+4. Ensure documentation exists
+5. Validate performance considerations
+
+OUTPUT FORMAT:
+{{
+  "decision": "approved" or "changes_requested",
+  "comments": "detailed review comments",
+  "specific_feedback": ["specific issue 1", "specific issue 2"],
+  "suggestions": ["suggestion 1", "suggestion 2"]
+}}
+
+Review now:"""
+        
+        try:
+            response = await self.gemini.generate(
+                agent_id=reviewer.id,
+                system=reviewer.system_prompt,
+                prompt=prompt,
+                temp=reviewer.temperature
+            )
+            
+            review_data = self._extract_json(response)
+            
+            if review_data:
+                decision = review_data.get('decision', 'approved')
+                comments = review_data.get('comments', '')
+                
+                if decision == 'approved':
+                    await self.team_comm.approve_review(
+                        review.id,
+                        reviewer_id,
+                        comments
+                    )
+                    # Mark task as completed
+                    if task:
+                        self.task_manager.complete_task(
+                            task['id'],
+                            f"Code reviewed and approved by {reviewer.name}. {comments}"
+                        )
+                        logger.info(f"✅ {reviewer.name} approved review: {review.description}")
+                else:
+                    changes_needed = '\n'.join(review_data.get('specific_feedback', []))
+                    await self.team_comm.request_changes(
+                        review.id,
+                        reviewer_id,
+                        f"{comments}\n\nSpecific feedback:\n{changes_needed}"
+                    )
+                    # Mark task as needs changes
+                    if task:
+                        task['status'] = 'pending'
+                        task['review_feedback'] = changes_needed
+                        self.task_manager._save_task(task['id'])
+                        logger.info(f"🔄 {reviewer.name} requested changes: {review.description}")
+        except Exception as e:
+            logger.error(f"❌ Review processing failed: {e}")
     
     async def _execute_agent_actions(self, agent, result_data: dict):
         """Execute browser/tool actions for an agent"""
@@ -964,6 +1453,9 @@ async def main():
     
     app = FastAPI()
     
+    # Store orchestrator reference for API endpoints
+    orchestrator_ref = {"instance": None}
+    
     @app.get("/")
     @app.get("/health")
     async def health():
@@ -981,6 +1473,255 @@ async def main():
             "service": "The Mangoes AI Team"
         }
     
+    # API endpoints for dashboard
+    @app.get("/api/dashboard/stats")
+    async def get_dashboard_stats():
+        """Get dashboard statistics"""
+        if not orchestrator_ref["instance"]:
+            return {
+                "cycle_count": 0,
+                "total_tasks": 0,
+                "completed_tasks": 0,
+                "pending_tasks": 0,
+                "in_progress_tasks": 0,
+                "completion_rate": 0,
+                "active_agents": 39,
+                "total_agents": 39,
+                "uptime_days": 0,
+                "uptime_hours": 0,
+                "status": "initializing"
+            }
+        
+        orch = orchestrator_ref["instance"]
+        tasks = list(orch.task_manager.tasks.values())
+        completed = len([t for t in tasks if t.get('status') == 'completed'])
+        pending = len([t for t in tasks if t.get('status') == 'pending'])
+        in_progress = len([t for t in tasks if t.get('status') == 'in_progress'])
+        uptime_hours = (datetime.now() - orch.start_time).total_seconds() / 3600
+        
+        return {
+            "cycle_count": orch.cycle_count,
+            "total_tasks": len(tasks),
+            "completed_tasks": completed,
+            "pending_tasks": pending,
+            "in_progress_tasks": in_progress,
+            "completion_rate": (completed / len(tasks) * 100) if len(tasks) > 0 else 0,
+            "active_agents": len(orch.agents),
+            "total_agents": len(orch.agents),
+            "uptime_days": uptime_hours / 24,
+            "uptime_hours": uptime_hours,
+            "status": "running"
+        }
+    
+    @app.get("/api/tasks")
+    async def get_tasks(status: Optional[str] = None, limit: int = 100):
+        """Get all tasks"""
+        if not orchestrator_ref["instance"]:
+            # Try to load tasks from disk if orchestrator not initialized yet
+            tasks_dir = Path(os.getenv('DATA_DIR', './data')) / "tasks"
+            if tasks_dir.exists():
+                tasks = []
+                for task_file in sorted(tasks_dir.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)[:limit]:
+                    try:
+                        with open(task_file) as f:
+                            task = json.load(f)
+                            task['id'] = task_file.stem
+                            if not status or task.get('status') == status:
+                                tasks.append(task)
+                    except:
+                        pass
+                return tasks
+            return []
+        
+        tasks = list(orchestrator_ref["instance"].task_manager.tasks.values())
+        tasks = sorted(tasks, key=lambda x: x.get('created_at', ''), reverse=True)[:limit]
+        
+        if status:
+            tasks = [t for t in tasks if t.get('status') == status]
+        
+        return tasks
+    
+    @app.get("/api/agents")
+    async def get_agents(type: Optional[str] = None):
+        """Get all agents"""
+        if not orchestrator_ref["instance"]:
+            return []
+        
+        agents = []
+        for agent_id, agent_config in orchestrator_ref["instance"].agents.items():
+            agent_data = {
+                "id": agent_id,
+                "name": agent_config.name,
+                "role": agent_config.role,
+                "type": "developer" if "mango" not in agent_id.lower() else "mango",
+                "status": "active",
+                "emoji": getattr(agent_config, 'emoji', '🤖')
+            }
+            if not type or agent_data["type"] == type:
+                agents.append(agent_data)
+        
+        return agents
+    
+    @app.get("/api/agents/{agent_id}")
+    async def get_agent_details(agent_id: str):
+        """Get agent details and their tasks"""
+        if not orchestrator_ref["instance"]:
+            raise HTTPException(status_code=404, detail="Orchestrator not initialized")
+        
+        orch = orchestrator_ref["instance"]
+        
+        # Find agent
+        agent_config = orch.agents.get(agent_id)
+        if not agent_config:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Get all tasks for this agent
+        all_tasks = list(orch.task_manager.tasks.values())
+        agent_tasks = [t for t in all_tasks if t.get('assigned_to') == agent_id]
+        
+        # Calculate stats
+        completed = len([t for t in agent_tasks if t.get('status') == 'completed'])
+        pending = len([t for t in agent_tasks if t.get('status') == 'pending'])
+        in_progress = len([t for t in agent_tasks if t.get('status') == 'in_progress'])
+        
+        return {
+            "id": agent_id,
+            "name": agent_config.name,
+            "role": agent_config.role,
+            "type": "developer" if "mango" not in agent_id.lower() else "mango",
+            "status": "active",
+            "emoji": getattr(agent_config, 'emoji', '🤖'),
+            "system_prompt": getattr(agent_config, 'system_prompt', '')[:500] if hasattr(agent_config, 'system_prompt') else '',
+            "tasks": sorted(agent_tasks, key=lambda x: x.get('created_at', ''), reverse=True),
+            "stats": {
+                "total_tasks": len(agent_tasks),
+                "completed": completed,
+                "pending": pending,
+                "in_progress": in_progress,
+                "completion_rate": (completed / len(agent_tasks) * 100) if len(agent_tasks) > 0 else 0
+            }
+        }
+    
+    @app.get("/api/activity")
+    async def get_activity(limit: int = 20):
+        """Get recent activity"""
+        if not orchestrator_ref["instance"]:
+            return []
+        
+        tasks = list(orchestrator_ref["instance"].task_manager.tasks.values())
+        tasks = sorted(tasks, key=lambda x: x.get('created_at', ''), reverse=True)[:limit]
+        
+        activity = []
+        for task in tasks:
+            activity.append({
+                "id": task.get('id'),
+                "type": "task",
+                "title": task.get('title', 'Untitled Task'),
+                "agent": task.get('assigned_to', 'Unknown'),
+                "status": task.get('status', 'unknown'),
+                "timestamp": task.get('created_at', datetime.now().isoformat()),
+                "message": task.get('description', '')[:100]
+            })
+        
+        return activity
+    
+    @app.get("/api/analytics")
+    async def get_analytics():
+        """Get analytics data"""
+        if not orchestrator_ref["instance"]:
+            return {
+                "dates": [],
+                "tasks_completed": [],
+                "agent_activity": [],
+                "success_rate": []
+            }
+        
+        orch = orchestrator_ref["instance"]
+        tasks = list(orch.task_manager.tasks.values())
+        
+        # Generate last 30 days of data
+        today = datetime.now()
+        dates = [(today - timedelta(days=i)).strftime("%b %d") for i in range(29, -1, -1)]
+        
+        # Group tasks by date
+        tasks_by_date = {}
+        for task in tasks:
+            if task.get('created_at'):
+                try:
+                    task_date = datetime.fromisoformat(task['created_at'].replace('Z', '+00:00'))
+                    date_key = task_date.strftime("%b %d")
+                    if date_key not in tasks_by_date:
+                        tasks_by_date[date_key] = {"completed": 0, "total": 0}
+                    tasks_by_date[date_key]["total"] += 1
+                    if task.get('status') == 'completed':
+                        tasks_by_date[date_key]["completed"] += 1
+                except:
+                    pass
+        
+        # Build arrays
+        tasks_completed = []
+        success_rate = []
+        for date in dates:
+            if date in tasks_by_date:
+                tasks_completed.append(tasks_by_date[date]["completed"])
+                total = tasks_by_date[date]["total"]
+                success_rate.append((tasks_by_date[date]["completed"] / total * 100) if total > 0 else 0)
+            else:
+                tasks_completed.append(0)
+                success_rate.append(0)
+        
+        # Agent activity (constant for now, could be enhanced)
+        agent_activity = [len(orch.agents)] * 30
+        
+        return {
+            "dates": dates,
+            "tasks_completed": tasks_completed,
+            "agent_activity": agent_activity,
+            "success_rate": success_rate
+        }
+    
+    @app.get("/api/evaluations")
+    async def get_evaluations(limit: int = 10):
+        """Get evaluations"""
+        eval_dir = Path(os.getenv('DATA_DIR', './data')) / "evaluations"
+        if not eval_dir.exists():
+            return []
+        
+        evals = []
+        for eval_file in sorted(eval_dir.glob("eval_*.json"), reverse=True)[:limit]:
+            try:
+                with open(eval_file) as f:
+                    eval_data = json.load(f)
+                    evals.append({
+                        "id": eval_file.stem,
+                        "timestamp": eval_data.get('timestamp'),
+                        "metrics": eval_data.get('metrics'),
+                        "evaluation": eval_data.get('evaluation'),
+                        "uptime_hours": eval_data.get('uptime_hours'),
+                        "cycle_count": eval_data.get('cycle_count')
+                    })
+            except:
+                pass
+        
+        return evals
+    
+    @app.get("/api/evaluations/latest")
+    async def get_latest_evaluation():
+        """Get latest evaluation"""
+        eval_dir = Path(os.getenv('DATA_DIR', './data')) / "evaluations"
+        if not eval_dir.exists():
+            return {"error": "No evaluations found"}
+        
+        eval_files = sorted(eval_dir.glob("eval_*.json"), reverse=True)
+        if not eval_files:
+            return {"error": "No evaluations found"}
+        
+        try:
+            with open(eval_files[0]) as f:
+                return json.load(f)
+        except:
+            return {"error": "Error reading evaluation"}
+    
     def run_server():
         port = int(os.getenv('PORT', 10000))
         uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
@@ -993,6 +1734,7 @@ async def main():
     
     # Run orchestrator in main thread
     orchestrator = Orchestrator()
+    orchestrator_ref["instance"] = orchestrator  # Store reference for API endpoints
     await orchestrator.run_forever()
 
 if __name__ == "__main__":
