@@ -1581,6 +1581,20 @@
                 
                 const result = await response.json();
                 
+                // Handle already approved/completed cases
+                if (result.status === 'already_completed' || result.status === 'already_approved') {
+                    showToast(result.message || 'Task was already processed', 'warning');
+                    // Reload to refresh the list
+                    setTimeout(() => {
+                        loadPendingTasks();
+                        loadDashboardStats();
+                        loadTasks();
+                    }, 500);
+                    button.disabled = false;
+                    button.textContent = originalText;
+                    return;
+                }
+                
                 // Show success message
                 button.textContent = '✅ Approved!';
                 button.style.background = '#10b981';
