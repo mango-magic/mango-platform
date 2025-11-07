@@ -306,14 +306,90 @@ class TaskManager:
         return [t for t in self.tasks.values() 
                 if t['assigned_to'] == agent_id and t['status'] == 'pending']
     
+    def _validate_proof_of_work(self, result: str) -> bool:
+        """Validate that result contains proof of work"""
+        if not result:
+            return False
+        
+        # Try to parse as JSON
+        try:
+            result_data = json.loads(result)
+        except:
+            # Not JSON - check if it's a meaningful string (not just empty or placeholder)
+            result_lower = result.lower().strip()
+            if len(result_lower) < 20:  # Too short to be meaningful
+                return False
+            # Check for common placeholder text
+            placeholders = ['task completed', 'done', 'finished', 'completed', 'ok']
+            if any(placeholder in result_lower and len(result_lower) < 50):
+                return False
+            # If it's a longer meaningful string, accept it
+            return True
+        
+        # Check for proof fields in JSON
+        proof_fields = [
+            'files_changed',  # List of files modified
+            'actions_taken',  # List of actions performed
+            'test_coverage',  # Test coverage percentage
+            'code_changes',   # Description of code changes
+            'commit_hash',    # Git commit hash
+            'pr_url',         # Pull request URL
+            'deployment_url', # Deployment URL
+            'screenshots',    # Screenshots taken
+            'api_endpoints',  # API endpoints created
+            'database_changes', # Database changes made
+        ]
+        
+        # Check if any proof field exists and has value
+        for field in proof_fields:
+            if field in result_data:
+                value = result_data[field]
+                # Check if value is meaningful
+                if isinstance(value, list) and len(value) > 0:
+                    return True
+                if isinstance(value, (int, float)) and value > 0:
+                    return True
+                if isinstance(value, str) and len(value.strip()) > 0:
+                    return True
+                if isinstance(value, bool) and value:
+                    return True
+        
+        # Check if result field contains meaningful content (not just task planning)
+        if 'result' in result_data:
+            result_text = str(result_data['result'])
+            # Reject if it looks like task planning (contains "tasks" array)
+            if 'tasks' in result_data and isinstance(result_data['tasks'], list):
+                # This is task planning, not proof of work
+                return False
+            # Check if result is meaningful
+            if len(result_text) > 50 and not result_text.lower().startswith('task'):
+                return True
+        
+        # Check if description field contains meaningful content
+        if 'description' in result_data:
+            desc = str(result_data['description'])
+            if len(desc) > 50:
+                return True
+        
+        return False
+    
     def complete_task(self, task_id: str, result: str):
-        """Mark task complete"""
+        """Mark task complete - ONLY if proof of work exists"""
         if task_id in self.tasks:
+            # Validate proof of work before completing
+            if not self._validate_proof_of_work(result):
+                logger.warning(f"❌ Cannot complete {task_id} - missing proof of work")
+                logger.warning(f"   Result: {result[:200]}...")
+                # Don't mark as completed - leave status as is
+                return False
+            
             self.tasks[task_id]['status'] = 'completed'
             self.tasks[task_id]['completed_at'] = datetime.now().isoformat()
             self.tasks[task_id]['result'] = result
             self._save_task(task_id)
             logger.info(f"✅ Completed: {task_id}")
+            return True
+        return False
 
 class Orchestrator:
     """The autonomous system that coordinates everything"""
@@ -1060,13 +1136,24 @@ IMPORTANT - CODE REVIEW PROCESS:
 - Do NOT mark task as complete until code is reviewed and approved
 - Follow world-class engineering practices: "We fight the code together, not each other"
 
-OUTPUT FORMAT:
+CRITICAL - PROOF OF WORK REQUIRED:
+Your task CANNOT be marked as completed without proof of work. You MUST include at least ONE of:
+- "files_changed": ["file1.py", "file2.tsx"] - REQUIRED if you changed code
+- "actions_taken": ["Created API", "Wrote tests"] - REQUIRED - list what you did
+- "test_coverage": 0.85 - Test coverage (0.0 to 1.0)
+- "code_changes": "Description" - What code you changed
+- "commit_hash": "abc123" - Git commit hash
+- "pr_url": "https://..." - Pull request URL
+
+WITHOUT PROOF OF WORK, YOUR TASK WILL BE BLOCKED AND NOT COMPLETED.
+
+OUTPUT FORMAT (MUST be valid JSON):
 {{
-  "actions_taken": ["action 1", "action 2", ...],
-  "files_changed": ["file1.py", "file2.tsx", ...],
-  "test_coverage": 0.95,
-  "result": "description of what was accomplished",
-  "status": "completed" or "blocked" or "needs_review",
+  "status": "completed" or "blocked",
+  "result": "Summary of what was accomplished",
+  "actions_taken": ["action 1", "action 2", ...],  // REQUIRED - what did you do?
+  "files_changed": ["file1.py", "file2.tsx", ...],  // REQUIRED if code changed
+  "test_coverage": 0.95,  // Optional but recommended
   "needs_code_review": true/false,
   "reviewer": "eng_manager_001",
   "next_steps": ["what should happen next"],
@@ -1154,6 +1241,12 @@ Please resubmit with proof of work.
                     )
                     return
             
+            # Handle code review requirement (only if we have proof of work)
+            needs_review = result_data and (
+                result_data.get('needs_code_review', False) or 
+                result_data.get('files_changed', [])
+            )
+            
             if needs_review:
                 # Request code review from Marcus or specified reviewer
                 reviewer = result_data.get('reviewer', 'eng_manager_001')
@@ -1180,16 +1273,18 @@ Please resubmit with proof of work.
                 task['status'] = 'in_review'
                 task['review_id'] = review_id
                 task['reviewer'] = reviewer
+                task['result'] = result_text  # Save result with proof
                 self.task_manager._save_task(task_id)
                 
                 logger.info(f"🔍 {agent.name} requested code review from {reviewer} for: {task['title']}")
                 
                 # Review will be processed in next cycle's review phase
             else:
-                # No code review needed, mark complete
-                result_text = json.dumps(result_data) if result_data else response
-                self.task_manager.complete_task(task_id, result_text)
-                logger.info(f"✅ {agent.name} completed: {task['title']}")
+                # No code review needed, mark complete (proof already validated)
+                if self.task_manager.complete_task(task_id, result_text):
+                    logger.info(f"✅ {agent.name} completed: {task['title']} (with proof of work)")
+                else:
+                    logger.error(f"❌ Failed to complete {task_id} - validation failed")
             
         except Exception as e:
             logger.error(f"❌ {agent.name} failed on {task['title']}: {e}")
