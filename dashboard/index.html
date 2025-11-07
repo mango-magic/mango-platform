@@ -2078,25 +2078,6 @@
                 if (desc.includes('task')) {
                     inferredFiles.push('core/orchestrator.py');
                 }
-            }
-            
-            // Try to infer files from task description if no files_changed
-            let inferredFiles = [];
-            if (filesChanged.length === 0 && task.description) {
-                // Look for common file patterns in description
-                const desc = task.description.toLowerCase();
-                if (desc.includes('dashboard')) {
-                    inferredFiles.push('dashboard/index.html', 'dashboard/app.py');
-                }
-                if (desc.includes('orchestrator') || desc.includes('core')) {
-                    inferredFiles.push('core/orchestrator.py');
-                }
-                if (desc.includes('agent')) {
-                    inferredFiles.push('config/agent_definitions.py');
-                }
-                if (desc.includes('task')) {
-                    inferredFiles.push('core/orchestrator.py');
-                }
                 // More inference patterns
                 if (desc.includes('frontend') || desc.includes('ui') || desc.includes('interface')) {
                     inferredFiles.push('dashboard/index.html');
@@ -2207,6 +2188,8 @@
                 </div>
                 `;
             }
+            
+            const content = `
                 <div class="info-grid">
                     <div class="info-item">
                         <div class="info-label">Status</div>
