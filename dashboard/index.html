@@ -2035,6 +2035,36 @@
             const githubLinks = task.github_links || [];
             const reviewDetails = task.review_details || null;
             
+            // Try to infer files from task description if no files_changed
+            let inferredFiles = [];
+            if (filesChanged.length === 0 && task.description) {
+                // Look for common file patterns in description
+                const desc = task.description.toLowerCase();
+                if (desc.includes('dashboard')) {
+                    inferredFiles.push('dashboard/index.html', 'dashboard/app.py');
+                }
+                if (desc.includes('orchestrator') || desc.includes('core')) {
+                    inferredFiles.push('core/orchestrator.py');
+                }
+                if (desc.includes('agent')) {
+                    inferredFiles.push('config/agent_definitions.py');
+                }
+                if (desc.includes('task')) {
+                    inferredFiles.push('core/orchestrator.py');
+                }
+            }
+            
+            // Build GitHub repo URL for search links
+            let githubRepo = '';
+            if (githubLinks.length > 0 && githubLinks[0].url) {
+                githubRepo = githubLinks[0].url.split('/blob/')[0];
+            } else {
+                // Try to get from task data or use default
+                githubRepo = 'https://github.com/mango-magic/mango-platform';
+            }
+            
+            const allFiles = filesChanged.length > 0 ? filesChanged : inferredFiles;
+            
             const content = `
                 <div class="info-grid">
                     <div class="info-item">
@@ -2076,18 +2106,35 @@
                 <div style="margin: 24px 0;">
                     <h3 style="margin-bottom: 12px;">Result Summary</h3>
                     <div style="background: #f0fdf4; padding: 16px; border-radius: 8px; border-left: 4px solid #10b981; color: #374151;">
-                        ${resultText}
+                        ${typeof resultText === 'string' && resultText.length > 500 ? 
+                            `<pre style="white-space: pre-wrap; font-family: monospace; font-size: 12px; margin: 0;">${escapeHtml(resultText)}</pre>` :
+                            resultText
+                        }
                     </div>
+                    ${resultData && Object.keys(resultData).length > 0 ? `
+                        <div style="margin-top: 12px; padding: 12px; background: #f9fafb; border-radius: 8px; font-size: 12px; color: #6b7280;">
+                            <strong>Structured Data:</strong> This task contains ${Object.keys(resultData).length} data field(s). 
+                            ${filesChanged.length === 0 ? 'No files_changed field found. ' : ''}
+                            ${githubRepo ? `<a href="${githubRepo}/search?q=${encodeURIComponent(task.title || task.description || '')}" target="_blank" style="color: #667eea; text-decoration: underline;">Search GitHub for related files →</a>` : ''}
+                        </div>
+                    ` : ''}
                 </div>
                 ` : ''}
                 
-                ${filesChanged.length > 0 ? `
+                ${allFiles.length > 0 ? `
                 <div style="margin: 24px 0;">
-                    <h3 style="margin-bottom: 12px;">📁 Files Changed (${filesChanged.length})</h3>
+                    <h3 style="margin-bottom: 12px;">
+                        📁 ${filesChanged.length > 0 ? 'Files Changed' : 'Related Files'} (${allFiles.length})
+                        ${filesChanged.length === 0 ? '<span style="font-size: 12px; font-weight: normal; color: #6b7280;">(inferred from task)</span>' : ''}
+                    </h3>
                     <div style="background: #f9fafb; padding: 16px; border-radius: 8px;">
                         <div style="display: flex; flex-direction: column; gap: 8px;">
-                            ${filesChanged.map((file, idx) => {
+                            ${allFiles.map((file, idx) => {
                                 const githubLink = githubLinks.find(gl => gl.file === file);
+                                // Build GitHub URL if not in links
+                                const fileUrl = githubLink ? githubLink.url : (githubRepo ? `${githubRepo}/blob/main/${file}` : null);
+                                const historyUrl = githubLink ? githubLink.history_url : (githubRepo ? `${githubRepo}/commits/main/${file}` : null);
+                                
                                 return `
                                     <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: white; border-radius: 6px; border: 1px solid #e5e7eb;">
                                         <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
@@ -2095,12 +2142,12 @@
                                             <code style="font-family: monospace; font-size: 13px; color: #1f2937; flex: 1;">${file}</code>
                                         </div>
                                         <div style="display: flex; gap: 8px;">
-                                            ${githubLink ? `
-                                                <a href="${githubLink.url}" target="_blank" style="background: #24292e; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                                            ${fileUrl ? `
+                                                <a href="${fileUrl}" target="_blank" style="background: #24292e; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
                                                     🔗 GitHub
                                                 </a>
-                                                ${githubLink.history_url ? `
-                                                    <a href="${githubLink.history_url}" target="_blank" style="background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;" title="View commit history">
+                                                ${historyUrl ? `
+                                                    <a href="${historyUrl}" target="_blank" style="background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;" title="View commit history">
                                                         📜 History
                                                     </a>
                                                 ` : ''}
@@ -2113,7 +2160,7 @@
                         </div>
                         <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
                             <div style="font-size: 12px; color: #6b7280;">
-                                💡 <strong>Proof:</strong> These files were modified as part of this task. Click "View Code" to see the actual changes or "GitHub" to see the file in the repository.
+                                💡 <strong>Proof:</strong> ${filesChanged.length > 0 ? 'These files were modified as part of this task.' : 'These files are likely related to this task based on the description.'} Click "View Code" to see the actual changes or "GitHub" to see the file in the repository.
                             </div>
                         </div>
                     </div>
