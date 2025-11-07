@@ -1514,8 +1514,15 @@
                 const reviewTasks = await reviewResponse.json();
                 const pendingTasks = await pendingResponse.json();
                 
-                // Combine and prioritize in_review tasks
-                const allTasks = [...reviewTasks, ...pendingTasks];
+                // Filter out tasks that are already completed or approved
+                const allTasks = [...reviewTasks, ...pendingTasks].filter(task => {
+                    // Exclude completed tasks
+                    if (task.status === 'completed') return false;
+                    // Exclude tasks that are in_progress and have been approved
+                    if (task.status === 'in_progress' && task.approved_at) return false;
+                    // Only include in_review or pending tasks
+                    return task.status === 'in_review' || task.status === 'pending';
+                });
                 
                 const list = document.getElementById('pendingList');
                 if (allTasks.length === 0) {
@@ -1531,6 +1538,7 @@
                                         <div style="display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: #9ca3af;">
                                             <span>👤 ${task.assigned_to || 'Unassigned'}</span>
                                             ${task.created_at ? `<span>📅 ${new Date(task.created_at).toLocaleString()}</span>` : ''}
+                                            ${task.approved_at ? `<span style="color: #10b981;">✅ Approved: ${new Date(task.approved_at).toLocaleString()}</span>` : ''}
                                         </div>
                                     </div>
                                     <span class="badge ${getStatusBadgeClass(task.status)}">${task.status}</span>

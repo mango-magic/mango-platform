@@ -1542,6 +1542,11 @@ async def main():
         
         if status:
             tasks = [t for t in tasks if t.get('status') == status]
+            # Filter out tasks that shouldn't appear in pending/in_review if they're already approved/completed
+            if status in ['pending', 'in_review']:
+                tasks = [t for t in tasks if t.get('status') == status and t.get('status') != 'completed']
+                # Also exclude in_progress tasks that have been approved
+                tasks = [t for t in tasks if not (t.get('status') == 'in_progress' and t.get('approved_at'))]
         
         return tasks
     
@@ -1557,18 +1562,40 @@ async def main():
         
         task = task_manager.tasks[task_id]
         
+        # Check if already completed or approved
+        if task.get('status') == 'completed':
+            logger.warning(f"⚠️ Task {task_id} already completed")
+            return {"status": "already_completed", "task_id": task_id, "message": "Task was already completed"}
+        
+        if task.get('status') == 'in_progress' and task.get('approved_at'):
+            logger.warning(f"⚠️ Task {task_id} already approved")
+            return {"status": "already_approved", "task_id": task_id, "message": "Task was already approved"}
+        
         # If task is in review, approve it and mark as completed
         if task.get('status') == 'in_review':
-            task_manager.complete_task(task_id, "Code review approved")
+            task_manager.complete_task(task_id, task.get('result', 'Code review approved'))
+            # Also update review status if exists
+            if task.get('review_id'):
+                team_comm = orchestrator_ref["instance"].team_comm
+                review_file = team_comm.reviews_dir / f"{task['review_id']}.json"
+                if review_file.exists():
+                    with open(review_file) as f:
+                        review_data = json.load(f)
+                    review_data['status'] = 'approved'
+                    review_data['reviewed_by'] = 'user'
+                    review_data['reviewed_at'] = datetime.now().isoformat()
+                    with open(review_file, 'w') as f:
+                        json.dump(review_data, f, indent=2)
             logger.info(f"✅ Task {task_id} approved and completed")
             return {"status": "approved", "task_id": task_id, "message": "Task approved and marked as completed"}
         elif task.get('status') == 'pending':
             # For pending tasks, mark as approved and move to in_progress
             task['status'] = 'in_progress'
             task['approved_at'] = datetime.now().isoformat()
+            task['approved_by'] = 'user'
             task_manager._save_task(task_id)
-            logger.info(f"✅ Task {task_id} approved")
-            return {"status": "approved", "task_id": task_id, "message": "Task approved"}
+            logger.info(f"✅ Task {task_id} approved and moved to in_progress")
+            return {"status": "approved", "task_id": task_id, "message": "Task approved and moved to in_progress"}
         else:
             raise HTTPException(status_code=400, detail=f"Cannot approve task with status: {task.get('status')}")
     
