@@ -1089,6 +1089,7 @@
             if (viewName === 'analytics') loadAnalytics();
             if (viewName === 'activity') loadActivity();
             if (viewName === 'evaluations') loadEvaluations();
+            if (viewName === 'pow') loadPOW();
         }
         
         // Load dashboard stats
@@ -3002,6 +3003,187 @@
             if (hours < 24) return `${hours}h ago`;
             const days = Math.floor(hours / 24);
             return `${days}d ago`;
+        }
+        
+        // Load Proof of Work
+        let allPOWData = [];
+        
+        async function loadPOW() {
+            try {
+                const response = await fetch('/api/tasks?status=completed&limit=500');
+                const tasks = await response.json();
+                
+                // Filter to only completed tasks with proof of work
+                allPOWData = tasks.filter(task => {
+                    if (task.status !== 'completed') return false;
+                    if (!task.result) return false;
+                    
+                    // Try to parse result
+                    try {
+                        const resultData = JSON.parse(task.result);
+                        // Check if it has proof fields
+                        return resultData.files_changed || 
+                               resultData.actions_taken || 
+                               resultData.commit_hash ||
+                               resultData.pr_url ||
+                               resultData.test_coverage !== undefined;
+                    } catch {
+                        // If not JSON, check if it's a meaningful string
+                        return task.result.length > 50;
+                    }
+                });
+                
+                displayPOW();
+            } catch (error) {
+                console.error('Error loading proof of work:', error);
+                document.getElementById('powList').innerHTML = `
+                    <div class="card">
+                        <p style="color: #ef4444;">Error loading proof of work: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        function displayPOW() {
+            const container = document.getElementById('powList');
+            const searchTerm = document.getElementById('powSearch')?.value.toLowerCase() || '';
+            const filter = document.getElementById('powFilter')?.value || 'all';
+            
+            let filtered = allPOWData.filter(task => {
+                // Search filter
+                if (searchTerm) {
+                    const matchesTitle = task.title?.toLowerCase().includes(searchTerm);
+                    const matchesAgent = task.assigned_to?.toLowerCase().includes(searchTerm);
+                    const matchesDescription = task.description?.toLowerCase().includes(searchTerm);
+                    if (!matchesTitle && !matchesAgent && !matchesDescription) return false;
+                }
+                
+                // Status filter
+                if (filter === 'completed' && task.status !== 'completed') return false;
+                
+                // Parse result to check for specific proof types
+                try {
+                    const resultData = JSON.parse(task.result);
+                    if (filter === 'with_files' && (!resultData.files_changed || resultData.files_changed.length === 0)) return false;
+                    if (filter === 'with_commits' && !resultData.commit_hash) return false;
+                } catch {
+                    // Not JSON, skip type filters
+                }
+                
+                return true;
+            });
+            
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="card" style="text-align: center; padding: 40px;">
+                        <div style="font-size: 48px; margin-bottom: 12px;">📭</div>
+                        <p style="color: rgba(255,255,255,0.8);">No proof of work found matching your criteria.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = filtered.map(task => {
+                let resultData = null;
+                let resultText = task.result || '';
+                try {
+                    resultData = JSON.parse(task.result);
+                    resultText = resultData.result || resultData.description || JSON.stringify(resultData, null, 2);
+                } catch {
+                    resultText = task.result;
+                }
+                
+                const filesChanged = resultData?.files_changed || [];
+                const actionsTaken = resultData?.actions_taken || [];
+                const commitHash = resultData?.commit_hash;
+                const prUrl = resultData?.pr_url;
+                const testCoverage = resultData?.test_coverage;
+                const githubRepo = task.github_repo || 'https://github.com/mango-magic/mango-platform';
+                const githubBranch = task.github_branch || 'main';
+                
+                return `
+                    <div class="card clickable" onclick="showTaskDetail('${task.id}')" style="cursor: pointer;">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px;">
+                            <div style="flex: 1;">
+                                <h3 style="margin: 0 0 8px 0; color: #1f2937;">${task.title || 'Untitled Task'}</h3>
+                                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                                    <span style="color: #667eea; font-weight: 600;">${task.assigned_to || 'Unassigned'}</span>
+                                    <span style="color: #9ca3af;">•</span>
+                                    <span style="color: #6b7280; font-size: 14px;">${task.completed_at ? new Date(task.completed_at).toLocaleString() : 'Unknown'}</span>
+                                </div>
+                            </div>
+                            <span class="badge badge-green">Completed</span>
+                        </div>
+                        
+                        ${resultText ? `
+                        <div style="background: #f0fdf4; padding: 12px; border-radius: 8px; margin-bottom: 12px; border-left: 4px solid #10b981;">
+                            <div style="font-size: 14px; color: #374151; line-height: 1.6;">
+                                ${resultText.length > 200 ? resultText.substring(0, 200) + '...' : resultText}
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px;">
+                            ${filesChanged.length > 0 ? `
+                            <div style="background: #eff6ff; padding: 12px; border-radius: 8px;">
+                                <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Files Changed</div>
+                                <div style="font-weight: 600; color: #1f2937;">${filesChanged.length} file${filesChanged.length !== 1 ? 's' : ''}</div>
+                                <div style="font-size: 11px; color: #9ca3af; margin-top: 4px;">
+                                    ${filesChanged.slice(0, 3).map(f => f.split('/').pop()).join(', ')}
+                                    ${filesChanged.length > 3 ? ` +${filesChanged.length - 3} more` : ''}
+                                </div>
+                            </div>
+                            ` : ''}
+                            
+                            ${actionsTaken.length > 0 ? `
+                            <div style="background: #fef3c7; padding: 12px; border-radius: 8px;">
+                                <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Actions Taken</div>
+                                <div style="font-weight: 600; color: #1f2937;">${actionsTaken.length} action${actionsTaken.length !== 1 ? 's' : ''}</div>
+                            </div>
+                            ` : ''}
+                            
+                            ${testCoverage !== undefined && testCoverage !== null ? `
+                            <div style="background: #ecfdf5; padding: 12px; border-radius: 8px;">
+                                <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Test Coverage</div>
+                                <div style="font-weight: 600; color: #10b981;">${(testCoverage * 100).toFixed(0)}%</div>
+                            </div>
+                            ` : ''}
+                            
+                            ${commitHash ? `
+                            <div style="background: #f3f4f6; padding: 12px; border-radius: 8px;">
+                                <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Commit</div>
+                                <div style="font-weight: 600; color: #1f2937; font-family: monospace; font-size: 12px;">${commitHash.substring(0, 8)}</div>
+                            </div>
+                            ` : ''}
+                        </div>
+                        
+                        ${filesChanged.length > 0 ? `
+                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
+                            <div style="font-size: 12px; color: #6b7280; margin-bottom: 8px;">Proof Files:</div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                                ${filesChanged.slice(0, 5).map(file => {
+                                    const fileUrl = `${githubRepo}/blob/${githubBranch}/${file}`;
+                                    return `<a href="${fileUrl}" target="_blank" style="background: #667eea; color: white; padding: 4px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
+                                        ${getFileIcon(file)} ${file.split('/').pop()}
+                                    </a>`;
+                                }).join('')}
+                                ${filesChanged.length > 5 ? `<span style="color: #9ca3af; font-size: 12px; padding: 4px 12px;">+${filesChanged.length - 5} more</span>` : ''}
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        ${prUrl ? `
+                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
+                            <a href="${prUrl}" target="_blank" style="color: #667eea; text-decoration: underline; font-size: 14px;">🔗 View Pull Request →</a>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function filterPOW() {
+            displayPOW();
         }
         
         // Fallback polling if WebSocket fails
