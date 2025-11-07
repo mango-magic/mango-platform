@@ -1109,6 +1109,51 @@ Execute now:"""
                 result_data.get('files_changed', [])
             )
             
+            # Validate proof of work before completing
+            if not needs_review:
+                # Check if we have proof of work
+                result_text = json.dumps(result_data) if result_data else response
+                has_proof = self.task_manager._validate_proof_of_work(result_text)
+                
+                if not has_proof:
+                    # No proof of work - mark as blocked and ask agent to provide evidence
+                    task['status'] = 'blocked'
+                    task['blocker_reason'] = 'Missing proof of work. Please provide files_changed, actions_taken, or other evidence of work completed.'
+                    task['result'] = result_text
+                    self.task_manager._save_task(task_id)
+                    
+                    logger.warning(f"⚠️ {agent.name} cannot complete '{task['title']}' - missing proof of work")
+                    logger.warning(f"   Result was: {result_text[:200]}...")
+                    
+                    # Send message to agent asking for proof
+                    await self.team_comm.send_message(
+                        Message(
+                            id=f"proof_request_{task_id}_{datetime.now().timestamp()}",
+                            from_agent='eng_manager_001',
+                            to_agent=agent_id,
+                            message_type="blocker",
+                            subject=f"Proof of Work Required: {task['title']}",
+                            content=f"""
+Your task '{task['title']}' cannot be marked as completed without proof of work.
+
+Please provide ONE of the following:
+- files_changed: List of files you modified
+- actions_taken: List of actions you performed  
+- test_coverage: Test coverage percentage
+- code_changes: Description of code changes
+- commit_hash: Git commit hash
+- pr_url: Pull request URL
+
+Current result: {result_text[:300]}
+
+Please resubmit with proof of work.
+                            """.strip(),
+                            timestamp=datetime.now().isoformat(),
+                            priority="high"
+                        )
+                    )
+                    return
+            
             if needs_review:
                 # Request code review from Marcus or specified reviewer
                 reviewer = result_data.get('reviewer', 'eng_manager_001')
