@@ -1621,15 +1621,58 @@ Review now:"""
     
     async def _execute_agent_actions(self, agent, result_data: dict):
         """Execute browser/tool actions for an agent"""
-        actions = result_data.get('actions_taken', [])
+        from tools.executor import ToolExecutor
         
+        executor = ToolExecutor(agent.id)
+        executed_actions = []
+        
+        # Execute file writes if files_changed is provided
+        if result_data.get('files_changed'):
+            # If agent provided code changes, write them
+            code_changes = result_data.get('code_changes', {})
+            if isinstance(code_changes, dict):
+                for file_path, content in code_changes.items():
+                    result = await executor.write_file({
+                        'path': file_path,
+                        'content': content
+                    })
+                    executed_actions.append({
+                        'type': 'write_file',
+                        'file': file_path,
+                        'success': result.get('success', False)
+                    })
+        
+        # Execute actions_taken if they're structured commands
+        actions = result_data.get('actions_taken', [])
         for action in actions:
-            # Parse action and execute with tools
-            # This is where browser automation, API calls, etc. happen
+            if isinstance(action, dict):
+                # Structured action
+                action_type = action.get('type')
+                action_data = action.get('data', {})
+                result = await executor.execute_action(action_type, action_data)
+                executed_actions.append({
+                    'type': action_type,
+                    'success': result.get('success', False),
+                    'result': result
+                })
+            else:
+                # String action - just log for now
             logger.info(f"🔧 {agent.name} executing: {action}")
             
-            # Tool execution happens here (see tools.py)
-            # For now, just log
+        # Run tests if test_coverage is mentioned
+        if result_data.get('test_coverage') is not None:
+            test_result = await executor.run_test({
+                'path': '.',
+                'command': 'pytest'
+            })
+            executed_actions.append({
+                'type': 'run_test',
+                'success': test_result.get('success', False),
+                'coverage': test_result.get('test_results', {}).get('summary', {}).get('coverage', 0)
+            })
+        
+        logger.info(f"✅ {agent.name} executed {len(executed_actions)} actions")
+        return executed_actions
     
     def _extract_json(self, text: str) -> Optional[dict]:
         """Extract JSON from LLM response"""
