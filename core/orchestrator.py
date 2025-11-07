@@ -1497,6 +1497,8 @@ async def main():
         completed = len([t for t in tasks if t.get('status') == 'completed'])
         pending = len([t for t in tasks if t.get('status') == 'pending'])
         in_progress = len([t for t in tasks if t.get('status') == 'in_progress'])
+        in_review = len([t for t in tasks if t.get('status') == 'in_review'])
+        failed = len([t for t in tasks if t.get('status') == 'failed'])
         uptime_hours = (datetime.now() - orch.start_time).total_seconds() / 3600
         
         return {
@@ -1505,6 +1507,8 @@ async def main():
             "completed_tasks": completed,
             "pending_tasks": pending,
             "in_progress_tasks": in_progress,
+            "in_review_tasks": in_review,
+            "failed_tasks": failed,
             "completion_rate": (completed / len(tasks) * 100) if len(tasks) > 0 else 0,
             "active_agents": len(orch.agents),
             "total_agents": len(orch.agents),
