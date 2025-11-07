@@ -1185,12 +1185,19 @@ OUTPUT FORMAT (MUST be valid JSON):
   "result": "Summary of what was accomplished",
   "actions_taken": ["action 1", "action 2", ...],  // REQUIRED - what did you do?
   "files_changed": ["file1.py", "file2.tsx", ...],  // REQUIRED if code changed
+  "code_changes": {{  // REQUIRED if you wrote code - provide actual file contents
+    "file1.py": "actual code content here...",
+    "file2.tsx": "actual code content here..."
+  }},
   "test_coverage": 0.95,  // Optional but recommended
   "needs_code_review": true/false,
   "reviewer": "eng_manager_001",
   "next_steps": ["what should happen next"],
   "blockers": ["any blockers encountered"]
 }}
+
+CRITICAL: If you write code, you MUST provide the actual code in "code_changes" as a dictionary mapping file paths to file contents.
+The system will automatically write these files and execute them. DO NOT just describe what you would do - PROVIDE THE ACTUAL CODE.
 
 Execute now:"""
 
