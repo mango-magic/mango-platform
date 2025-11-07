@@ -2080,9 +2080,133 @@
                 }
             }
             
-            const allFiles = filesChanged.length > 0 ? filesChanged : inferredFiles;
+            // Try to infer files from task description if no files_changed
+            let inferredFiles = [];
+            if (filesChanged.length === 0 && task.description) {
+                // Look for common file patterns in description
+                const desc = task.description.toLowerCase();
+                if (desc.includes('dashboard')) {
+                    inferredFiles.push('dashboard/index.html', 'dashboard/app.py');
+                }
+                if (desc.includes('orchestrator') || desc.includes('core')) {
+                    inferredFiles.push('core/orchestrator.py');
+                }
+                if (desc.includes('agent')) {
+                    inferredFiles.push('config/agent_definitions.py');
+                }
+                if (desc.includes('task')) {
+                    inferredFiles.push('core/orchestrator.py');
+                }
+                // More inference patterns
+                if (desc.includes('frontend') || desc.includes('ui') || desc.includes('interface')) {
+                    inferredFiles.push('dashboard/index.html');
+                }
+                if (desc.includes('backend') || desc.includes('api') || desc.includes('server')) {
+                    inferredFiles.push('core/orchestrator.py', 'dashboard/app.py');
+                }
+                if (desc.includes('config') || desc.includes('setting')) {
+                    inferredFiles.push('config/agent_definitions.py');
+                }
+            }
             
-            const content = `
+            // If still no files, show at least a link to search GitHub or view recent commits
+            const allFiles = filesChanged.length > 0 ? filesChanged : inferredFiles;
+            const hasAnyFiles = allFiles.length > 0;
+            
+            // Build proof of work section - always show something for completed tasks
+            let proofOfWorkSection = '';
+            if (hasAnyFiles) {
+                proofOfWorkSection = `
+                <div style="margin: 24px 0;">
+                    <h3 style="margin-bottom: 12px;">
+                        📁 ${filesChanged.length > 0 ? 'Files Changed' : 'Related Files'} (${allFiles.length})
+                        ${filesChanged.length === 0 ? '<span style="font-size: 12px; font-weight: normal; color: #6b7280;">(inferred from task)</span>' : ''}
+                    </h3>
+                    <div style="background: #f9fafb; padding: 16px; border-radius: 8px;">
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            ${allFiles.map((file, idx) => {
+                                const githubLink = githubLinks.find(gl => gl.file === file);
+                                // Build GitHub URL if not in links
+                                const fileUrl = githubLink ? githubLink.url : (githubRepo ? `${githubRepo}/blob/${githubBranch}/${file}` : null);
+                                const historyUrl = githubLink ? githubLink.history_url : (githubRepo ? `${githubRepo}/commits/${githubBranch}/${file}` : null);
+                                
+                                return `
+                                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: white; border-radius: 6px; border: 1px solid #e5e7eb;">
+                                        <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
+                                            <span style="font-size: 16px;">${getFileIcon(file)}</span>
+                                            <code style="font-family: monospace; font-size: 13px; color: #1f2937; flex: 1;">${file}</code>
+                                        </div>
+                                        <div style="display: flex; gap: 8px;">
+                                            ${fileUrl ? `
+                                                <a href="${fileUrl}" target="_blank" style="background: #24292e; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                                                    🔗 GitHub
+                                                </a>
+                                                ${historyUrl ? `
+                                                    <a href="${historyUrl}" target="_blank" style="background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;" title="View commit history">
+                                                        📜 History
+                                                    </a>
+                                                ` : ''}
+                                            ` : '<span style="color: #9ca3af; font-size: 12px;">No GitHub repo configured</span>'}
+                                            <button onclick="viewFileContent('${file}', '${task.id}')" style="background: #667eea; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">View Code</button>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
+                            <div style="font-size: 12px; color: #6b7280;">
+                                💡 <strong>Proof:</strong> ${filesChanged.length > 0 ? 'These files were modified as part of this task.' : 'These files are likely related to this task based on the description.'} Click "View Code" to see the actual changes or "GitHub" to see the file in the repository.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                `;
+            } else if (task.status === 'completed' && githubRepo) {
+                // Fallback: Show GitHub search and commit history links even if no files identified
+                proofOfWorkSection = `
+                <div style="margin: 24px 0;">
+                    <h3 style="margin-bottom: 12px;">🔍 Proof of Work</h3>
+                    <div style="background: #f9fafb; padding: 16px; border-radius: 8px;">
+                        <div style="margin-bottom: 16px;">
+                            <p style="color: #6b7280; margin-bottom: 12px;">This task has been completed. View the work in the repository:</p>
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <a href="${githubRepo}/commits/${githubBranch}" target="_blank" style="display: flex; align-items: center; gap: 8px; padding: 12px; background: white; border-radius: 6px; border: 1px solid #e5e7eb; text-decoration: none; color: #1f2937;">
+                                    <span style="font-size: 20px;">📜</span>
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600;">View Recent Commits</div>
+                                        <div style="font-size: 12px; color: #6b7280;">See all recent changes in the repository</div>
+                                    </div>
+                                    <span style="color: #667eea;">→</span>
+                                </a>
+                                <a href="${githubRepo}/search?q=${encodeURIComponent(task.title || task.description || '')}" target="_blank" style="display: flex; align-items: center; gap: 8px; padding: 12px; background: white; border-radius: 6px; border: 1px solid #e5e7eb; text-decoration: none; color: #1f2937;">
+                                    <span style="font-size: 20px;">🔍</span>
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600;">Search Repository</div>
+                                        <div style="font-size: 12px; color: #6b7280;">Find files related to: "${task.title || 'this task'}"</div>
+                                    </div>
+                                    <span style="color: #667eea;">→</span>
+                                </a>
+                                ${task.completed_at ? `
+                                <a href="${githubRepo}/commits/${githubBranch}?since=${new Date(task.completed_at).toISOString().split('T')[0]}" target="_blank" style="display: flex; align-items: center; gap: 8px; padding: 12px; background: white; border-radius: 6px; border: 1px solid #e5e7eb; text-decoration: none; color: #1f2937;">
+                                    <span style="font-size: 20px;">📅</span>
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600;">Commits Around Completion</div>
+                                        <div style="font-size: 12px; color: #6b7280;">View commits around ${new Date(task.completed_at).toLocaleDateString()}</div>
+                                    </div>
+                                    <span style="color: #667eea;">→</span>
+                                </a>
+                                ` : ''}
+                            </div>
+                        </div>
+                        <div style="padding-top: 12px; border-top: 1px solid #e5e7eb;">
+                            <div style="font-size: 12px; color: #6b7280;">
+                                💡 <strong>Note:</strong> This task was completed but no specific files were tracked. Use the links above to find related work in the repository.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }
                 <div class="info-grid">
                     <div class="info-item">
                         <div class="info-label">Status</div>
