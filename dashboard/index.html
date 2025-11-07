@@ -2245,51 +2245,7 @@
                 </div>
                 ` : ''}
                 
-                ${allFiles.length > 0 ? `
-                <div style="margin: 24px 0;">
-                    <h3 style="margin-bottom: 12px;">
-                        📁 ${filesChanged.length > 0 ? 'Files Changed' : 'Related Files'} (${allFiles.length})
-                        ${filesChanged.length === 0 ? '<span style="font-size: 12px; font-weight: normal; color: #6b7280;">(inferred from task)</span>' : ''}
-                    </h3>
-                    <div style="background: #f9fafb; padding: 16px; border-radius: 8px;">
-                        <div style="display: flex; flex-direction: column; gap: 8px;">
-                            ${allFiles.map((file, idx) => {
-                                const githubLink = githubLinks.find(gl => gl.file === file);
-                                // Build GitHub URL if not in links
-                                const fileUrl = githubLink ? githubLink.url : (githubRepo ? `${githubRepo}/blob/${githubBranch}/${file}` : null);
-                                const historyUrl = githubLink ? githubLink.history_url : (githubRepo ? `${githubRepo}/commits/${githubBranch}/${file}` : null);
-                                
-                                return `
-                                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: white; border-radius: 6px; border: 1px solid #e5e7eb;">
-                                        <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
-                                            <span style="font-size: 16px;">${getFileIcon(file)}</span>
-                                            <code style="font-family: monospace; font-size: 13px; color: #1f2937; flex: 1;">${file}</code>
-                                        </div>
-                                        <div style="display: flex; gap: 8px;">
-                                            ${fileUrl ? `
-                                                <a href="${fileUrl}" target="_blank" style="background: #24292e; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
-                                                    🔗 GitHub
-                                                </a>
-                                                ${historyUrl ? `
-                                                    <a href="${historyUrl}" target="_blank" style="background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;" title="View commit history">
-                                                        📜 History
-                                                    </a>
-                                                ` : ''}
-                                            ` : '<span style="color: #9ca3af; font-size: 12px;">No GitHub repo configured</span>'}
-                                            <button onclick="viewFileContent('${file}', '${task.id}')" style="background: #667eea; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">View Code</button>
-                                        </div>
-                                    </div>
-                                `;
-                            }).join('')}
-                        </div>
-                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
-                            <div style="font-size: 12px; color: #6b7280;">
-                                💡 <strong>Proof:</strong> ${filesChanged.length > 0 ? 'These files were modified as part of this task.' : 'These files are likely related to this task based on the description.'} Click "View Code" to see the actual changes or "GitHub" to see the file in the repository.
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                ` : ''}
+                ${proofOfWorkSection}
                 
                 ${actionsTaken.length > 0 ? `
                 <div style="margin: 24px 0;">
